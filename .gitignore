@@ -1,0 +1,27 @@
+# ── Python / Virtual Environments ──
+.venv/
+venv/
+pumpwatch/venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Pumpwatch Cache & Output ──
+pumpwatch/.cache/
+pumpwatch/output/
+.cache/
+output/
+
+# ── Node / Next.js ──
+frontend/node_modules/
+node_modules/
+frontend/.next/
+.next/
+frontend/out/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db

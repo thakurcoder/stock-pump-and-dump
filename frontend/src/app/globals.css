@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* ── Pulse-glow animation for EXTREME badge ── */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(168, 85, 247, 0.35), 0 0 0 rgba(168,85,247,0); }
+  50%       { box-shadow: 0 0 20px rgba(168, 85, 247, 0.7), 0 0 40px rgba(168,85,247,0.2); }
+}
+.badge-extreme-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: #0a0d14; }
+::-webkit-scrollbar-thumb  { background: #1e2d45; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #2d4060; }
