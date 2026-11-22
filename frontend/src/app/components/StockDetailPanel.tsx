@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Activity, AlertTriangle, Info, RefreshCw, ShieldAlert, X } from "lucide-react";
+import Link from "next/link";
+import { Activity, AlertTriangle, ExternalLink, Info, Maximize2, RefreshCw, ShieldAlert, X } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -193,13 +194,23 @@ export default function StockDetailPanel({ stock: row, onClose }: { stock: Stock
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="p-2 rounded-lg bg-white/[0.04] hover:bg-white/10 border border-white/10 text-slate-400 hover:text-white transition-all shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/stock/${stock.ticker}`}
+              title="Open full page analysis"
+              className="px-2.5 py-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 text-sky-400 hover:text-sky-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Full Page</span>
+            </Link>
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="p-2 rounded-lg bg-white/[0.04] hover:bg-white/10 border border-white/10 text-slate-400 hover:text-white transition-all shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}

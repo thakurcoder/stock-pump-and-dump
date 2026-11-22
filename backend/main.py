@@ -44,6 +44,10 @@ executor = ThreadPoolExecutor(max_workers=4)
 SCREEN_CACHE_TTL = 15 * 60  # 15 minutes
 _screen_cache: Dict[tuple, tuple[float, Dict[str, Any]]] = {}
 
+# 5-minute cache for market indices
+INDEX_CACHE_TTL = 5 * 60
+_indices_cache: tuple[float, List[Dict[str, Any]]] = (0.0, [])
+
 
 # ── Pydantic Models ───────────────────────────────────────────────────────────
 
@@ -142,13 +146,27 @@ class WatchlistResponse(BaseModel):
 
 
 class WatchlistUpdatePayload(BaseModel):
-    tickers: List[str] = Field(..., max_items=100)
+    tickers: List[str] = Field(..., max_length=100)
 
 
 class ConfigResponse(BaseModel):
     thresholds: Dict[str, Any]
     weights: Dict[str, Any]
     risk_levels: List[Any]
+
+
+NIFTY_50_TICKERS = [
+    "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AXISBANK",
+    "BAJAJ-AUTO", "BAJFINANCE", "BAJAJFINSV", "BEL", "BPCL",
+    "BHARTIARTL", "BRITANNIA", "CIPLA", "COALINDIA", "DRREDDY",
+    "EICHERMOT", "GRASIM", "HCLTECH", "HDFCBANK", "HDFCLIFE",
+    "HEROMOTOCO", "HINDALCO", "HINDUNILVR", "ICICIBANK", "INDUSINDBK",
+    "INFY", "ITC", "JSWSTEEL", "KOTAKBANK", "LT",
+    "M&M", "MARUTI", "NESTLEIND", "NTPC", "ONGC",
+    "POWERGRID", "RELIANCE", "SBILIFE", "SHRIRAMFIN", "SBIN",
+    "SUNPHARMA", "TCS", "TATACONSUM", "TATAMOTORS", "TATASTEEL",
+    "TECHM", "TITAN", "TRENT", "ULTRACEMCO", "WIPRO"
+]
 
 
 # ── Helper Functions ──────────────────────────────────────────────────────────
@@ -316,22 +334,72 @@ async def health():
     }
 
 
+def _fetch_indices_sync() -> List[Dict[str, Any]]:
+    global _indices_cache
+    cached_time, cached_data = _indices_cache
+    now = time.time()
+    if cached_data and (now - cached_time < INDEX_CACHE_TTL):
+        return cached_data
+
+    index_map = [
+        ("^NSEI", "NIFTY 50"),
+        ("^NSEBANK", "NIFTY BANK"),
+        ("^CNXIT", "NIFTY IT"),
+    ]
+    results = []
+    try:
+        import yfinance as yf
+        for symbol, name in index_map:
+            try:
+                t = yf.Ticker(symbol)
+                h = t.history(period="5d")
+                if len(h) >= 2:
+                    c_last = float(h["Close"].iloc[-1])
+                    c_prev = float(h["Close"].iloc[-2])
+                    chg = c_last - c_prev
+                    chg_pct = (chg / c_prev) * 100 if c_prev != 0 else 0.0
+                    results.append({
+                        "symbol": name,
+                        "value": round(c_last, 2),
+                        "change": round(chg, 2),
+                        "change_percent": round(chg_pct, 2),
+                        "positive": chg >= 0,
+                    })
+                elif len(h) == 1:
+                    c_last = float(h["Close"].iloc[-1])
+                    results.append({
+                        "symbol": name,
+                        "value": round(c_last, 2),
+                        "change": 0.0,
+                        "change_percent": 0.0,
+                        "positive": True,
+                    })
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    if not results and cached_data:
+        return cached_data
+    elif results:
+        _indices_cache = (now, results)
+        return results
+
+    return []
+
+
 @app.get("/api/market-indices")
 async def get_market_indices():
     """
-    Market status and lightweight market reference.
+    Market status and live market index telemetry from Yahoo Finance.
     """
     ist = pytz.timezone("Asia/Kolkata")
     now_ist = datetime.now(ist)
     minutes = now_ist.hour * 60 + now_ist.minute
     is_open = now_ist.weekday() < 5 and (9 * 60 + 15 <= minutes < 15 * 60 + 30)
 
-    # Lightweight index data without slowing down screens
-    indices = [
-        {"symbol": "NIFTY 50", "value": 24850.50, "change": 125.30, "change_percent": 0.51, "positive": True},
-        {"symbol": "NIFTY BANK", "value": 52120.10, "change": -84.20, "change_percent": -0.16, "positive": False},
-        {"symbol": "NIFTY SMALLCAP", "value": 18940.80, "change": 240.60, "change_percent": 1.28, "positive": True},
-    ]
+    loop = asyncio.get_running_loop()
+    indices = await loop.run_in_executor(executor, _fetch_indices_sync)
 
     return {
         "indices": indices,
@@ -347,6 +415,7 @@ async def screen_stocks(
     asof: Optional[str] = Query(None, description="As-of date in YYYY-MM-DD format"),
     refresh: bool = Query(False, description="Bypass in-memory and disk cache"),
     hide_liquid: bool = Query(False, description="Hide large liquid stocks (show only thinly traded)"),
+    universe: str = Query("watchlist", description="Stock universe: 'watchlist' or 'nifty50'"),
 ):
     if asof:
         try:
@@ -357,9 +426,11 @@ async def screen_stocks(
                 detail="Invalid asof format. Expected YYYY-MM-DD.",
             )
 
+    target_tickers = NIFTY_50_TICKERS if universe.lower() == "nifty50" else None
+
     try:
         loop = asyncio.get_running_loop()
-        data = await loop.run_in_executor(executor, _run_screening_sync, None, asof, refresh)
+        data = await loop.run_in_executor(executor, _run_screening_sync, target_tickers, asof, refresh)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -516,3 +587,191 @@ async def get_config():
         "weights": pw_config.WEIGHTS,
         "risk_levels": pw_config.RISK_LEVELS,
     }
+
+
+def _search_symbols_sync(query: str) -> List[Dict[str, str]]:
+    clean_q = query.strip().upper()
+    if not clean_q:
+        return []
+
+    results = []
+    seen = set()
+
+    # 1. First check local watchlist symbols for instant match
+    watchlist = pumpwatch.load_tickers()
+    for sym in watchlist:
+        if clean_q in sym:
+            results.append({
+                "ticker": sym,
+                "name": f"{sym} (Watchlist)",
+                "exchange": "NSE"
+            })
+            seen.add(sym)
+            if len(results) >= 8:
+                return results
+
+    # 2. Query yfinance Search for broader NSE universe
+    try:
+        import yfinance as yf
+        search_res = yf.Search(clean_q, max_results=12)
+        quotes = getattr(search_res, "quotes", [])
+        for q in quotes:
+            sym = str(q.get("symbol", ""))
+            exch = str(q.get("exchange", "")).upper()
+            shortname = str(q.get("shortname") or q.get("longname") or sym)
+
+            # Match Indian / NSE symbols
+            if sym.endswith(".NS") or exch in ("NSI", "NSE"):
+                clean_sym = sym.replace(".NS", "").upper()
+                if clean_sym not in seen:
+                    seen.add(clean_sym)
+                    results.append({
+                        "ticker": clean_sym,
+                        "name": shortname,
+                        "exchange": "NSE"
+                    })
+            if len(results) >= 8:
+                break
+    except Exception:
+        pass
+
+    return results
+
+
+@app.get("/api/search")
+async def search_stocks(q: str = Query(..., min_length=1, description="Symbol or company name")):
+    """
+    Autocomplete search suggestions for NSE stocks.
+    """
+    loop = asyncio.get_running_loop()
+    matches = await loop.run_in_executor(executor, _search_symbols_sync, q)
+    return {"query": q, "results": matches}
+
+
+def _get_recommendations_sync() -> Dict[str, Any]:
+    # 1. Fetch live Nifty 50 and Bank Nifty for Options suggestion
+    import yfinance as yf
+
+    option_recs = []
+    try:
+        nifty = yf.Ticker("^NSEI")
+        h = nifty.history(period="5d")
+        if len(h) >= 2:
+            c_last = float(h["Close"].iloc[-1])
+            c_prev = float(h["Close"].iloc[-2])
+            chg_pct = ((c_last - c_prev) / c_prev) * 100
+            atm_strike = round(c_last / 50) * 50
+
+            bias = "BULLISH" if chg_pct >= 0.2 else "BEARISH" if chg_pct <= -0.2 else "NEUTRAL"
+            rec_type = "CALL (CE)" if bias == "BULLISH" else "PUT (PE)" if bias == "BEARISH" else "STRADDLE / IRON CONDOR"
+            target_strike = atm_strike if bias != "NEUTRAL" else atm_strike
+            strategy = (
+                f"Buy NIFTY {target_strike} CE — Momentum rally (+{chg_pct:.2f}%)."
+                if bias == "BULLISH"
+                else f"Buy NIFTY {target_strike} PE — Bearish pressure ({chg_pct:.2f}%)."
+                if bias == "BEARISH"
+                else f"Rangebound market ({chg_pct:+.2f}%). Non-directional option selling or hedging recommended."
+            )
+
+            option_recs.append({
+                "instrument": "NIFTY 50 Options",
+                "underlying_price": round(c_last, 2),
+                "bias": bias,
+                "recommended_action": rec_type,
+                "strike": target_strike,
+                "strategy": strategy,
+                "risk_profile": "High Risk / High Reward (Hedging / Momentum)",
+                "expiry": "Current Weekly Expiry"
+            })
+    except Exception:
+        pass
+
+    try:
+        bank = yf.Ticker("^NSEBANK")
+        hb = bank.history(period="5d")
+        if len(hb) >= 2:
+            cb_last = float(hb["Close"].iloc[-1])
+            cb_prev = float(hb["Close"].iloc[-2])
+            chgb_pct = ((cb_last - cb_prev) / cb_prev) * 100
+            atm_bank = round(cb_last / 100) * 100
+
+            bias_b = "BULLISH" if chgb_pct >= 0.3 else "BEARISH" if chgb_pct <= -0.3 else "NEUTRAL"
+            rec_b = "CALL (CE)" if bias_b == "BULLISH" else "PUT (PE)" if bias_b == "BEARISH" else "RANGEBOUND"
+            option_recs.append({
+                "instrument": "BANK NIFTY Options",
+                "underlying_price": round(cb_last, 2),
+                "bias": bias_b,
+                "recommended_action": rec_b,
+                "strike": atm_bank,
+                "strategy": f"Banking Index moving {chgb_pct:+.2f}%. Suggested strike: {atm_bank} {rec_b}.",
+                "risk_profile": "High Volatility (Intraday / Weekly)",
+                "expiry": "Current Weekly Expiry"
+            })
+    except Exception:
+        pass
+
+    # 2. Stock Recommendations: Screen Nifty 50 + Watchlist for High-Confidence Opportunities
+    stock_candidates = []
+    try:
+        screen_data = _run_screening_sync(NIFTY_50_TICKERS, None, False)
+        stocks = screen_data.get("stocks", [])
+
+        # Filter Safe Momentum Buys (Low Risk Score, Positive Price Momentum, Healthy Volume)
+        safe_momentum = [
+            s for s in stocks
+            if s.get("score", 100) < 35
+            and s.get("price_change_1d", 0) > 0.5
+            and not s.get("thinly_traded", True)
+        ]
+
+        # Breakout candidates (Clean volume ratio 1.5x - 3.0x with healthy liquidity)
+        breakouts = [
+            s for s in stocks
+            if 1.4 <= s.get("volume_ratio", 0) <= 3.5
+            and s.get("score", 100) < 45
+            and not s.get("thinly_traded", True)
+        ]
+
+        for s in safe_momentum[:3]:
+            stock_candidates.append({
+                "ticker": s["ticker"],
+                "category": "SAFE BLUECHIP MOMENTUM",
+                "action": "BUY / ACCUMULATE",
+                "price": s["price"],
+                "change_1d": s["price_change_1d"],
+                "risk_score": s["score"],
+                "risk_level": s["level"],
+                "reason": f"Low manipulation score ({s['score']}/100) with strong +{s['price_change_1d']:.1f}% 1-day momentum and institutional liquidity."
+            })
+
+        for s in breakouts[:2]:
+            if s["ticker"] not in [c["ticker"] for c in stock_candidates]:
+                stock_candidates.append({
+                    "ticker": s["ticker"],
+                    "category": "VOLUME BREAKOUT",
+                    "action": "SWING TRADING",
+                    "price": s["price"],
+                    "change_1d": s["price_change_1d"],
+                    "risk_score": s["score"],
+                    "risk_level": s["level"],
+                    "reason": f"Healthy volume surge ({s['volume_ratio']:.1f}x) without entering extreme overbought levels."
+                })
+    except Exception:
+        pass
+
+    return {
+        "options_recommendations": option_recs,
+        "stocks_recommendations": stock_candidates,
+        "disclaimer": "Educational and quantitative reference only. Consult a SEBI-registered advisor before executing financial trades."
+    }
+
+
+@app.get("/api/recommendations")
+async def get_trading_recommendations():
+    """
+    Trading recommendations: Index Options strategies (Nifty/BankNifty)
+    and High-Conviction safe momentum stock candidates.
+    """
+    loop = asyncio.get_running_loop()
+    recs = await loop.run_in_executor(executor, _get_recommendations_sync)
+    return recs

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   ShieldAlert,
   TrendingUp,
@@ -12,8 +13,12 @@ import {
   BarChart2,
   Clock,
   Eye,
+  ListFilter,
+  Maximize2,
+  Compass,
 } from "lucide-react";
 import StockDetailPanel, { getRiskColors, type Stock } from "./components/StockDetailPanel";
+import WatchlistModal from "./components/WatchlistModal";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -43,14 +48,103 @@ export default function Dashboard() {
   const [disclaimer, setDisclaimer] = useState(
     "Screening tool only. Flags suspicious patterns, not proof of manipulation."
   );
+  const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
+  const [universe, setUniverse] = useState<"watchlist" | "nifty50">("watchlist");
+  const [analyzingTicker, setAnalyzingTicker] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Array<{ ticker: string; name: string; exchange: string }>>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
-  const fetchData = async () => {
+  // Debounced search suggestions
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q || q.length < 1) {
+      setSuggestions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(q)}`);
+        if (res.ok) {
+          const d = await res.json();
+          setSuggestions(d.results || []);
+        }
+      } catch (err) {
+        // Ignore background suggestion errors
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const handleDirectSearch = async (targetTicker?: string, e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setShowSuggestions(false);
+    const clean = (targetTicker || searchQuery).trim().toUpperCase().replace(/\.NS$/, "");
+    if (!clean) return;
+
+    // First check if it's already in our loaded stocks list
+    const found = stocks.find((s) => s.ticker.toUpperCase() === clean);
+    if (found) {
+      setSelectedStock(found);
+      setSearchError(null);
+      return;
+    }
+
+    // Otherwise, fetch on-demand live safety analysis directly from backend
+    setAnalyzingTicker(true);
+    setSearchError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/stock/${encodeURIComponent(clean)}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error(`NSE Stock '${clean}' not found or has insufficient history on NSE.`);
+        }
+        throw new Error(`Server returned error ${res.status} checking ${clean}`);
+      }
+      const data = await res.json();
+      const syntheticStock: Stock = {
+        ticker: data.ticker,
+        exchange: data.exchange || "NSE",
+        risk_score: data.risk_score ?? data.score ?? 0,
+        risk_level: (data.risk_level ?? data.level ?? "LOW").toUpperCase(),
+        is_suspicious: Boolean(data.is_suspicious),
+        price: data.price ?? 0,
+        price_change_percent: data.price_change_percent ?? 0,
+        volume: data.volume ?? 0,
+        last_updated: data.last_updated ?? "",
+        demo: Boolean(data.demo),
+        thinly_traded: Boolean(data.signals?.thinly_traded),
+        reasons: data.reasons ?? "",
+        volume_ratio: data.signals?.volume_ratio,
+        volume_zscore: data.signals?.volume_zscore,
+        price_change_1d: data.signals?.price_change_1d,
+        price_change_3d: data.signals?.price_change_3d,
+        price_change_5d: data.signals?.price_change_5d,
+        rsi: data.signals?.rsi,
+        avg_turnover_cr: data.signals?.avg_turnover_cr,
+      };
+
+      // Add to current stocks list if not already present so user can see it in table too
+      setStocks((prev) => [syntheticStock, ...prev.filter((s) => s.ticker !== syntheticStock.ticker)]);
+      setSelectedStock(syntheticStock);
+      setSearchQuery("");
+    } catch (err: any) {
+      setSearchError(err?.message || `Failed to analyze stock ${clean}`);
+    } finally {
+      setAnalyzingTicker(false);
+    }
+  };
+
+  const fetchData = async (targetUniverse?: "watchlist" | "nifty50") => {
+    const selectedUniverse = targetUniverse || universe;
     setLoading(true);
     setError(null);
     try {
       const [idxRes, screenRes] = await Promise.all([
         fetch(`${API_BASE}/api/market-indices`),
-        fetch(`${API_BASE}/api/screen?top=50`),
+        fetch(`${API_BASE}/api/screen?top=50&universe=${selectedUniverse}`),
       ]);
       if (idxRes.ok) {
         const d = await idxRes.json();
@@ -77,9 +171,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 60_000);
+    const interval = setInterval(() => fetchData(), 60_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [universe]);
 
   const filteredStocks = stocks.filter((s) => {
     const q = searchQuery.toLowerCase();
@@ -132,8 +226,26 @@ export default function Dashboard() {
                 </div>
               )}
 
+              <Link
+                href="/recommendations"
+                title="View Trading Recommendations (Options first, then Stocks)"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500/15 to-orange-500/15 hover:from-amber-500/25 hover:to-orange-500/25 border border-amber-500/30 text-amber-300 hover:text-amber-200 text-xs font-bold transition-all shadow-sm"
+              >
+                <Compass className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Recommendations</span>
+              </Link>
+
               <button
-                onClick={fetchData}
+                onClick={() => setIsWatchlistOpen(true)}
+                title="Manage Watchlist"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 text-sky-400 hover:text-sky-300 text-xs font-semibold transition-all"
+              >
+                <ListFilter className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Watchlist</span>
+              </button>
+
+              <button
+                onClick={() => fetchData()}
                 disabled={loading}
                 title="Refresh"
                 className="p-2 rounded-lg bg-white/[0.04] hover:bg-white/10 border border-white/10 text-slate-400 hover:text-white transition-all disabled:opacity-40"
@@ -212,55 +324,151 @@ export default function Dashboard() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="relative max-w-sm w-full sm:w-auto flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-            <input
-              id="stock-search"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search — RELIANCE, TCS…"
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-slate-100 placeholder:text-slate-600 text-sm focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              onClick={() => setHideLiquid(!hideLiquid)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide border transition-all flex items-center gap-1.5 ${
-                hideLiquid
-                  ? "bg-sky-500/15 border-sky-500/40 text-sky-300 shadow-sm shadow-sky-500/20"
-                  : "bg-white/[0.03] border-white/10 text-slate-500 hover:text-slate-300"
-              }`}
-              title="Filter out large-cap, highly liquid stocks which can score Medium/High on standard earnings or news"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              Hide Large Liquid Stocks: {hideLiquid ? "ON" : "OFF"}
-            </button>
-
-            {(["ALL", "EXTREME", "HIGH", "MEDIUM", "LOW"] as const).map((lvl) => {
-              const active = riskFilter === lvl;
-              const c =
-                lvl === "EXTREME" ? "text-purple-300 border-purple-500/40 bg-purple-500/15"
-                : lvl === "HIGH" ? "text-rose-300 border-rose-500/40 bg-rose-500/15"
-                : lvl === "MEDIUM" ? "text-amber-300 border-amber-500/40 bg-amber-500/15"
-                : lvl === "LOW" ? "text-emerald-300 border-emerald-500/40 bg-emerald-500/15"
-                : "text-sky-300 border-sky-500/40 bg-sky-500/15";
-              return (
+        <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative max-w-md w-full">
+              <form onSubmit={(e) => handleDirectSearch(undefined, e)} className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                  <input
+                    id="stock-search"
+                    type="text"
+                    value={searchQuery}
+                    onFocus={() => setShowSuggestions(true)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setShowSuggestions(true);
+                      if (searchError) setSearchError(null);
+                    }}
+                    placeholder="Analyze any NSE Stock (e.g. INFOSYS, ZOMATO, SUZLON)..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-slate-100 placeholder:text-slate-500 text-sm focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all font-mono uppercase"
+                  />
+                </div>
                 <button
-                  key={lvl}
-                  id={`filter-${lvl.toLowerCase()}`}
-                  onClick={() => setRiskFilter(lvl)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide border transition-all ${
-                    active ? c : "bg-white/[0.03] border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20"
+                  type="submit"
+                  disabled={analyzingTicker || !searchQuery.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold transition-all disabled:opacity-40 flex items-center gap-1.5 shrink-0 shadow-lg shadow-sky-500/20"
+                  title="Run real-time safety & manipulation analysis for this stock"
+                >
+                  {analyzingTicker ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                  {analyzingTicker ? "Analyzing..." : "Check Safety"}
+                </button>
+              </form>
+
+              {/* Suggestions Dropdown */}
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-xl bg-slate-900 border border-white/10 shadow-2xl overflow-hidden backdrop-blur-xl">
+                  <div className="p-1 max-h-64 overflow-y-auto divide-y divide-white/[0.04] scrollbar-thin">
+                    {suggestions.map((item) => (
+                      <button
+                        key={item.ticker}
+                        type="button"
+                        onClick={() => handleDirectSearch(item.ticker)}
+                        className="w-full text-left px-3.5 py-2.5 hover:bg-white/[0.06] rounded-lg transition-colors flex items-center justify-between group"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-mono font-bold text-white group-hover:text-sky-400 text-sm">
+                            {item.ticker}
+                          </span>
+                          <span className="text-xs text-slate-400 truncate max-w-[200px]">
+                            {item.name}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.05] border border-white/10 text-sky-400 shrink-0">
+                          {item.exchange}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Universe Selector (Watchlist vs Nifty 50) */}
+              <div className="flex items-center bg-white/[0.04] p-0.5 rounded-xl border border-white/10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUniverse("watchlist");
+                    fetchData("watchlist");
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    universe === "watchlist"
+                      ? "bg-sky-500 text-white shadow-md shadow-sky-500/25"
+                      : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
-                  {lvl}
+                  Watchlist
                 </button>
-              );
-            })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUniverse("nifty50");
+                    setHideLiquid(false); // In Nifty 50 mode, disable hiding liquid stocks so all 50 show
+                    fetchData("nifty50");
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    universe === "nifty50"
+                      ? "bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/25"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  NIFTY 50
+                </button>
+              </div>
+
+              <button
+                onClick={() => setHideLiquid(!hideLiquid)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide border transition-all flex items-center gap-1.5 ${
+                  hideLiquid
+                    ? "bg-sky-500/15 border-sky-500/40 text-sky-300 shadow-sm shadow-sky-500/20"
+                    : "bg-white/[0.03] border-white/10 text-slate-500 hover:text-slate-300"
+                }`}
+                title="Filter out large-cap, highly liquid stocks which can score Medium/High on standard earnings or news"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Hide Liquid: {hideLiquid ? "ON" : "OFF"}
+              </button>
+
+              {(["ALL", "EXTREME", "HIGH", "MEDIUM", "LOW"] as const).map((lvl) => {
+                const active = riskFilter === lvl;
+                const c =
+                  lvl === "EXTREME" ? "text-purple-300 border-purple-500/40 bg-purple-500/15"
+                  : lvl === "HIGH" ? "text-rose-300 border-rose-500/40 bg-rose-500/15"
+                  : lvl === "MEDIUM" ? "text-amber-300 border-amber-500/40 bg-amber-500/15"
+                  : lvl === "LOW" ? "text-emerald-300 border-emerald-500/40 bg-emerald-500/15"
+                  : "text-sky-300 border-sky-500/40 bg-sky-500/15";
+                return (
+                  <button
+                    key={lvl}
+                    id={`filter-${lvl.toLowerCase()}`}
+                    onClick={() => setRiskFilter(lvl)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide border transition-all ${
+                      active ? c : "bg-white/[0.03] border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20"
+                    }`}
+                  >
+                    {lvl}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {searchError && (
+            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5">
+                <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                {searchError}
+              </span>
+              <button
+                onClick={() => setSearchError(null)}
+                className="text-slate-400 hover:text-white text-xs px-1"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Disclaimer Banner */}
@@ -276,7 +484,7 @@ export default function Dashboard() {
           <div className="px-4 py-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs flex items-center justify-between gap-3">
             <span>{error}</span>
             <button
-              onClick={fetchData}
+              onClick={() => fetchData()}
               className="px-3 py-1 rounded bg-rose-500/30 hover:bg-rose-500/40 text-xs font-bold text-white transition-all shrink-0"
             >
               Retry
@@ -341,14 +549,24 @@ export default function Dashboard() {
                               {stock.ticker.slice(0, 2)}
                             </div>
                             <div>
-                              <p className="font-bold text-white group-hover:text-sky-400 transition-colors">
-                                {stock.ticker}
-                                {stock.demo && (
-                                  <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold align-middle">
-                                    DEMO
-                                  </span>
-                                )}
-                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-bold text-white group-hover:text-sky-400 transition-colors">
+                                  {stock.ticker}
+                                  {stock.demo && (
+                                    <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold align-middle">
+                                      DEMO
+                                    </span>
+                                  )}
+                                </p>
+                                <Link
+                                  href={`/stock/${stock.ticker}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  title="Open dedicated full page"
+                                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-slate-400 hover:text-sky-400 transition-all"
+                                >
+                                  <Maximize2 className="w-3.5 h-3.5" />
+                                </Link>
+                              </div>
                               <p className="text-[11px] text-slate-500 font-mono">{stock.exchange}</p>
                             </div>
                           </div>
@@ -407,6 +625,14 @@ export default function Dashboard() {
       <footer className="border-t border-white/[0.05] py-4 text-center text-xs text-slate-700 font-mono">
         SentinelMarket © {new Date().getFullYear()} — AI-Powered Market Surveillance — NSE / BSE
       </footer>
+
+      {/* Watchlist Modal */}
+      <WatchlistModal
+        isOpen={isWatchlistOpen}
+        onClose={() => setIsWatchlistOpen(false)}
+        apiBase={API_BASE}
+        onWatchlistUpdated={() => fetchData()}
+      />
 
       {/* Detail panel: fetches its own data and stays open on errors */}
       {selectedStock && (

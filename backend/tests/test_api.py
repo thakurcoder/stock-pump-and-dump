@@ -208,3 +208,12 @@ def test_stock_detail_not_found(mock_fetch_one):
 def test_asof_invalid_date():
     res = client.get("/api/screen?asof=invalid-date")
     assert res.status_code == 400
+
+
+def test_market_indices():
+    res = client.get("/api/market-indices")
+    assert res.status_code == 200
+    data = res.json()
+    assert "market_status" in data
+    assert "indices" in data
+    assert isinstance(data["indices"], list)
