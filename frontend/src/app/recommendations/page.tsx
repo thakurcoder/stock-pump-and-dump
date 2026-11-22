@@ -145,9 +145,26 @@ export default function RecommendationsPage() {
                     </div>
                     <div>
                       <p className="text-slate-500">Suggested Strike</p>
-                      <p className="font-mono font-bold text-sky-400 mt-0.5">{opt.strike} {opt.recommended_action.split(" ")[0]}</p>
+                      <p className="font-mono font-bold text-sky-400 mt-0.5">{opt.contract_name || `${opt.strike} ${opt.recommended_action.split(" ")[0]}`}</p>
                     </div>
                   </div>
+
+                  {opt.target_premium && (
+                    <div className="grid grid-cols-3 gap-2 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04] text-[11px] font-mono">
+                      <div>
+                        <span className="text-slate-500 block text-[9px]">EST. PREMIUM</span>
+                        <span className="text-slate-200 font-bold">₹{opt.estimated_premium}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[9px]">TARGET</span>
+                        <span className="text-emerald-400 font-bold">₹{opt.target_premium}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[9px]">STOP LOSS</span>
+                        <span className="text-rose-400 font-bold">₹{opt.stop_loss_premium}</span>
+                      </div>
+                    </div>
+                  )}
 
                   <p className="text-xs text-slate-300 leading-relaxed">{opt.strategy}</p>
 
@@ -202,6 +219,23 @@ export default function RecommendationsPage() {
                         <span className="text-sky-400 font-bold">{stk.action}</span>
                       </div>
                     </div>
+
+                    {stk.target_price && (
+                      <div className="grid grid-cols-3 gap-2 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04] text-[11px] font-mono">
+                        <div>
+                          <span className="text-slate-500 block text-[9px]">TARGET</span>
+                          <span className="text-emerald-400 font-bold">₹{stk.target_price}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[9px]">STOP LOSS</span>
+                          <span className="text-rose-400 font-bold">₹{stk.stop_loss_price}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[9px]">R : R</span>
+                          <span className="text-sky-400 font-bold">{stk.risk_reward}</span>
+                        </div>
+                      </div>
+                    )}
 
                     <p className="text-xs text-slate-300 leading-relaxed">{stk.reason}</p>
                   </div>

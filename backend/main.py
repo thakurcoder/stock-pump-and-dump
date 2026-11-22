@@ -673,12 +673,21 @@ def _get_recommendations_sync() -> Dict[str, Any]:
                 else f"Rangebound market ({chg_pct:+.2f}%). Non-directional option selling or hedging recommended."
             )
 
+            # Targets and Stop-Loss estimates based on ATM option standard behavior
+            entry_est = round(c_last * 0.007, 1)  # Approximate weekly ATM premium ~0.7% of spot
+            sl_est = round(entry_est * 0.65, 1)
+            tgt_est = round(entry_est * 1.5, 1)
+
             option_recs.append({
                 "instrument": "NIFTY 50 Options",
                 "underlying_price": round(c_last, 2),
                 "bias": bias,
                 "recommended_action": rec_type,
                 "strike": target_strike,
+                "contract_name": f"NIFTY {target_strike} {rec_type.split()[0]}",
+                "estimated_premium": entry_est,
+                "target_premium": tgt_est,
+                "stop_loss_premium": sl_est,
                 "strategy": strategy,
                 "risk_profile": "High Risk / High Reward (Hedging / Momentum)",
                 "expiry": "Current Weekly Expiry"
@@ -697,12 +706,17 @@ def _get_recommendations_sync() -> Dict[str, Any]:
 
             bias_b = "BULLISH" if chgb_pct >= 0.3 else "BEARISH" if chgb_pct <= -0.3 else "NEUTRAL"
             rec_b = "CALL (CE)" if bias_b == "BULLISH" else "PUT (PE)" if bias_b == "BEARISH" else "RANGEBOUND"
+            entry_b = round(cb_last * 0.008, 1)
             option_recs.append({
                 "instrument": "BANK NIFTY Options",
                 "underlying_price": round(cb_last, 2),
                 "bias": bias_b,
                 "recommended_action": rec_b,
                 "strike": atm_bank,
+                "contract_name": f"BANKNIFTY {atm_bank} {rec_b.split()[0]}",
+                "estimated_premium": entry_b,
+                "target_premium": round(entry_b * 1.5, 1),
+                "stop_loss_premium": round(entry_b * 0.65, 1),
                 "strategy": f"Banking Index moving {chgb_pct:+.2f}%. Suggested strike: {atm_bank} {rec_b}.",
                 "risk_profile": "High Volatility (Intraday / Weekly)",
                 "expiry": "Current Weekly Expiry"
@@ -733,12 +747,18 @@ def _get_recommendations_sync() -> Dict[str, Any]:
         ]
 
         for s in safe_momentum[:3]:
+            entry_p = s["price"]
+            sl_p = round(entry_p * 0.965, 1)   # 3.5% stop loss
+            tgt_p = round(entry_p * 1.07, 1)    # 7.0% target (1:2 risk reward)
             stock_candidates.append({
                 "ticker": s["ticker"],
                 "category": "SAFE BLUECHIP MOMENTUM",
                 "action": "BUY / ACCUMULATE",
-                "price": s["price"],
+                "price": entry_p,
                 "change_1d": s["price_change_1d"],
+                "target_price": tgt_p,
+                "stop_loss_price": sl_p,
+                "risk_reward": "1 : 2.0",
                 "risk_score": s["score"],
                 "risk_level": s["level"],
                 "reason": f"Low manipulation score ({s['score']}/100) with strong +{s['price_change_1d']:.1f}% 1-day momentum and institutional liquidity."
@@ -746,12 +766,18 @@ def _get_recommendations_sync() -> Dict[str, Any]:
 
         for s in breakouts[:2]:
             if s["ticker"] not in [c["ticker"] for c in stock_candidates]:
+                entry_p = s["price"]
+                sl_p = round(entry_p * 0.95, 1)     # 5.0% stop loss
+                tgt_p = round(entry_p * 1.10, 1)    # 10.0% target (1:2 risk reward)
                 stock_candidates.append({
                     "ticker": s["ticker"],
                     "category": "VOLUME BREAKOUT",
                     "action": "SWING TRADING",
-                    "price": s["price"],
+                    "price": entry_p,
                     "change_1d": s["price_change_1d"],
+                    "target_price": tgt_p,
+                    "stop_loss_price": sl_p,
+                    "risk_reward": "1 : 2.0",
                     "risk_score": s["score"],
                     "risk_level": s["level"],
                     "reason": f"Healthy volume surge ({s['volume_ratio']:.1f}x) without entering extreme overbought levels."
