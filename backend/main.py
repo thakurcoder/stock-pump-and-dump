@@ -648,54 +648,44 @@ async def search_stocks(q: str = Query(..., min_length=1, description="Symbol or
     return {"query": q, "results": matches}
 
 
+from backend.nifty_options_strategy import analyze_nifty_options_strategy
+
+
 def _get_recommendations_sync() -> Dict[str, Any]:
-    # 1. Fetch live Nifty 50 and Bank Nifty for Options suggestion
-    import yfinance as yf
+    # 1. Advanced NIFTY 50 Options Strategy (Open Interest & Volatility Engine)
+    nifty_oi_analysis = {}
+    try:
+        nifty_oi_analysis = analyze_nifty_options_strategy()
+    except Exception as exc:
+        nifty_oi_analysis = {"error": str(exc)}
 
+    # 2. Legacy / Simple Options summary for overview
     option_recs = []
+    if "trade_recommendation" in nifty_oi_analysis:
+        rec = nifty_oi_analysis["trade_recommendation"]
+        spot = nifty_oi_analysis.get("spot_price", 25800.0)
+        vix = nifty_oi_analysis.get("india_vix", 16.0)
+        atm_strike = round(spot / 50) * 50
+        entry_est = round(spot * 0.007, 1)
+
+        option_recs.append({
+            "instrument": "NIFTY 50 Options (OI Model)",
+            "underlying_price": spot,
+            "bias": nifty_oi_analysis.get("market_direction", "BULLISH"),
+            "recommended_action": rec.get("strategy_name", "Bull Call Spread"),
+            "strike": atm_strike,
+            "contract_name": rec.get("legs", [f"NIFTY {atm_strike} CE"])[0],
+            "estimated_premium": entry_est,
+            "target_premium": round(entry_est * 1.5, 1),
+            "stop_loss_premium": round(entry_est * 0.65, 1),
+            "strategy": rec.get("rationale", ""),
+            "risk_profile": rec.get("execution_type", "Debit Spread"),
+            "expiry": "Current Weekly Expiry",
+        })
+
+    # Bank Nifty simple overview
     try:
-        nifty = yf.Ticker("^NSEI")
-        h = nifty.history(period="5d")
-        if len(h) >= 2:
-            c_last = float(h["Close"].iloc[-1])
-            c_prev = float(h["Close"].iloc[-2])
-            chg_pct = ((c_last - c_prev) / c_prev) * 100
-            atm_strike = round(c_last / 50) * 50
-
-            bias = "BULLISH" if chg_pct >= 0.2 else "BEARISH" if chg_pct <= -0.2 else "NEUTRAL"
-            rec_type = "CALL (CE)" if bias == "BULLISH" else "PUT (PE)" if bias == "BEARISH" else "STRADDLE / IRON CONDOR"
-            target_strike = atm_strike if bias != "NEUTRAL" else atm_strike
-            strategy = (
-                f"Buy NIFTY {target_strike} CE — Momentum rally (+{chg_pct:.2f}%)."
-                if bias == "BULLISH"
-                else f"Buy NIFTY {target_strike} PE — Bearish pressure ({chg_pct:.2f}%)."
-                if bias == "BEARISH"
-                else f"Rangebound market ({chg_pct:+.2f}%). Non-directional option selling or hedging recommended."
-            )
-
-            # Targets and Stop-Loss estimates based on ATM option standard behavior
-            entry_est = round(c_last * 0.007, 1)  # Approximate weekly ATM premium ~0.7% of spot
-            sl_est = round(entry_est * 0.65, 1)
-            tgt_est = round(entry_est * 1.5, 1)
-
-            option_recs.append({
-                "instrument": "NIFTY 50 Options",
-                "underlying_price": round(c_last, 2),
-                "bias": bias,
-                "recommended_action": rec_type,
-                "strike": target_strike,
-                "contract_name": f"NIFTY {target_strike} {rec_type.split()[0]}",
-                "estimated_premium": entry_est,
-                "target_premium": tgt_est,
-                "stop_loss_premium": sl_est,
-                "strategy": strategy,
-                "risk_profile": "High Risk / High Reward (Hedging / Momentum)",
-                "expiry": "Current Weekly Expiry"
-            })
-    except Exception:
-        pass
-
-    try:
+        import yfinance as yf
         bank = yf.Ticker("^NSEBANK")
         hb = bank.history(period="5d")
         if len(hb) >= 2:
@@ -703,7 +693,6 @@ def _get_recommendations_sync() -> Dict[str, Any]:
             cb_prev = float(hb["Close"].iloc[-2])
             chgb_pct = ((cb_last - cb_prev) / cb_prev) * 100
             atm_bank = round(cb_last / 100) * 100
-
             bias_b = "BULLISH" if chgb_pct >= 0.3 else "BEARISH" if chgb_pct <= -0.3 else "NEUTRAL"
             rec_b = "CALL (CE)" if bias_b == "BULLISH" else "PUT (PE)" if bias_b == "BEARISH" else "RANGEBOUND"
             entry_b = round(cb_last * 0.008, 1)
@@ -719,12 +708,12 @@ def _get_recommendations_sync() -> Dict[str, Any]:
                 "stop_loss_premium": round(entry_b * 0.65, 1),
                 "strategy": f"Banking Index moving {chgb_pct:+.2f}%. Suggested strike: {atm_bank} {rec_b}.",
                 "risk_profile": "High Volatility (Intraday / Weekly)",
-                "expiry": "Current Weekly Expiry"
+                "expiry": "Current Weekly Expiry",
             })
     except Exception:
         pass
 
-    # 2. Stock Recommendations: Screen Nifty 50 + Watchlist for High-Confidence Opportunities
+    # 3. Stock Recommendations: Screen Nifty 50 + Watchlist for High-Confidence Opportunities
     stock_candidates = []
     try:
         screen_data = _run_screening_sync(NIFTY_50_TICKERS, None, False)
@@ -786,6 +775,7 @@ def _get_recommendations_sync() -> Dict[str, Any]:
         pass
 
     return {
+        "nifty_options_strategy": nifty_oi_analysis,
         "options_recommendations": option_recs,
         "stocks_recommendations": stock_candidates,
         "disclaimer": "Educational and quantitative reference only. Consult a SEBI-registered advisor before executing financial trades."
