@@ -6,7 +6,6 @@ import {
   TrendingUp, 
   TrendingDown, 
   ShieldAlert, 
-  HelpCircle, 
   ArrowRight, 
   Activity, 
   CheckCircle2, 
@@ -18,14 +17,20 @@ import {
   Compass
 } from "lucide-react";
 
+interface NoTradeRule {
+  rule: string;
+  status: string;
+  triggered: boolean;
+  detail: string;
+}
+
 interface NiftyStrategy {
-  nifty_spot: number;
-  nifty_change_pct: number;
-  vix: number;
-  vix_change_pct: number;
+  spot_price: number;
+  spot_change_pct: number;
+  india_vix: number;
   vix_direction: string;
-  historical_volatility_hv: number;
-  average_iv: number;
+  historical_volatility: number;
+  max_pain_strike: number;
   pre_trade_setup: {
     intraday: {
       support_strike: number;
@@ -40,58 +45,38 @@ interface NiftyStrategy {
       resistance_total_oi: number;
     };
   };
-  step_a_panic_unwinding: {
-    triggered: boolean;
+  range_filter: {
+    strike_distance: number;
+    threshold_pts: number;
+    is_wide_range: boolean;
+    range_verdict: string;
+  };
+  panic_unwinding_override: {
     type: string;
-    description: string;
     action: string;
-  };
-  step_b_strike_range: {
-    spread_points: number;
-    spread_pct: number;
-    threshold_pct: number;
-    classification: string;
-    description: string;
-    eligible_for_directional: boolean;
-  };
-  step_c_strategy_execution: {
-    direction: string;
-    vix_state: string;
+    detail: string;
+  } | null;
+  market_direction: string;
+  trade_recommendation: {
     strategy_name: string;
-    trade_type: string;
+    execution_type: string;
+    legs: string[];
     rationale: string;
-    recommended_legs: Array<{
-      action: string;
-      strike: number;
-      option_type: string;
-      ltp: number;
-    }>;
-    naked_alternative: {
-      available: boolean;
-      recommendation: string;
-      rule: string;
-    };
   };
-  no_trade_and_exit_rules: {
-    expiry_week_warning: {
-      is_expiry_week: boolean;
-      message: string;
-    };
-    max_pain: {
-      strike: number;
-      warning: string;
-    };
-    reversal_zones: {
-      distance_to_major_resistance: number;
-      distance_to_major_support: number;
-      status: string;
-    };
-    vix_sweet_spot: {
-      is_in_sweet_spot: boolean;
-      current_vix: number;
-      guidance: string;
-    };
-  };
+  naked_alternative: {
+    action: string;
+    condition: string;
+  } | null;
+  no_trade_rules: NoTradeRule[];
+  chain_rows?: Array<{
+    strike: number;
+    call_oi: number;
+    call_chg_oi: number;
+    call_ltp: number;
+    put_oi: number;
+    put_chg_oi: number;
+    put_ltp: number;
+  }>;
 }
 
 interface OptionRecommendation {
@@ -191,7 +176,7 @@ export default function RecommendationsPage() {
             <Compass className="w-6 h-6 text-indigo-400 shrink-0" />
             <div>
               <h2 className="text-sm font-semibold text-indigo-200">
-                Institutional NIFTY 50 OI Derivative Engine Active
+                Institutional NIFTY 50 OI Strategy Active
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 Evaluates Intraday / Positional Open Interest (OI), Trapped Writer Panic Unwinding, Strike Range Width, and INDIAVIX Regime.
@@ -200,10 +185,10 @@ export default function RecommendationsPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-slate-800/80 text-cyan-400 border border-slate-700">
-              NIFTY Spot: {niftyStrategy ? niftyStrategy.nifty_spot.toLocaleString("en-IN") : "..."}
+              NIFTY Spot: {niftyStrategy ? niftyStrategy.spot_price.toLocaleString("en-IN") : "..."}
             </span>
             <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-slate-800/80 text-amber-400 border border-slate-700">
-              INDIA VIX: {niftyStrategy ? `${niftyStrategy.vix} (${niftyStrategy.vix_direction})` : "..."}
+              INDIA VIX: {niftyStrategy ? `${niftyStrategy.india_vix} (${niftyStrategy.vix_direction})` : "..."}
             </span>
           </div>
         </div>
@@ -314,18 +299,18 @@ export default function RecommendationsPage() {
                 {/* STEP 2: CORE ENTRY CHECKS & EXECUTION */}
                 <div className="p-6 rounded-xl border border-slate-800 bg-gradient-to-b from-slate-900/80 to-slate-950 space-y-6">
                   {/* Step A Panic alert if active */}
-                  {niftyStrategy.step_a_panic_unwinding.triggered && (
+                  {niftyStrategy.panic_unwinding_override && (
                     <div className="p-4 rounded-xl border border-amber-500/40 bg-amber-950/30 flex items-start space-x-3 text-amber-200">
                       <Zap className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                       <div>
                         <h4 className="text-sm font-bold text-amber-300">
-                          Step A: Panic Unwinding Override Detected ({niftyStrategy.step_a_panic_unwinding.type})
+                          Step A: Panic Unwinding Override Active ({niftyStrategy.panic_unwinding_override.type})
                         </h4>
                         <p className="text-xs text-amber-200/90 mt-1 leading-relaxed">
-                          {niftyStrategy.step_a_panic_unwinding.description}
+                          {niftyStrategy.panic_unwinding_override.detail}
                         </p>
                         <span className="inline-block mt-2 font-mono text-xs font-semibold px-2.5 py-1 rounded bg-amber-900/60 border border-amber-700 text-amber-100">
-                          Immediate Action: {niftyStrategy.step_a_panic_unwinding.action}
+                          Action: {niftyStrategy.panic_unwinding_override.action}
                         </span>
                       </div>
                     </div>
@@ -339,29 +324,29 @@ export default function RecommendationsPage() {
                           Step B: Strike Range Filter
                         </span>
                         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
-                          niftyStrategy.step_b_strike_range.eligible_for_directional
+                          !niftyStrategy.range_filter.is_wide_range
                             ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800"
                             : "bg-amber-950/80 text-amber-400 border border-amber-800"
                         }`}>
-                          {niftyStrategy.step_b_strike_range.classification}
+                          {niftyStrategy.range_filter.range_verdict}
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-1">
-                        {niftyStrategy.step_b_strike_range.description}
+                        Distance between MAX CHG IN OI PE and CE. Threshold is approx ~1.65% of spot.
                       </p>
                     </div>
 
                     <div className="flex items-center space-x-4 shrink-0 text-right">
                       <div>
-                        <div className="text-xs text-slate-400">Distance</div>
+                        <div className="text-xs text-slate-400">Spread Distance</div>
                         <div className="text-sm font-mono font-bold text-slate-200">
-                          {niftyStrategy.step_b_strike_range.spread_points} pts ({niftyStrategy.step_b_strike_range.spread_pct}%)
+                          {niftyStrategy.range_filter.strike_distance} pts
                         </div>
                       </div>
                       <div className="border-l border-slate-700 pl-4">
-                        <div className="text-xs text-slate-400">Threshold</div>
+                        <div className="text-xs text-slate-400">Max Threshold</div>
                         <div className="text-sm font-mono font-bold text-cyan-400">
-                          ≤ {niftyStrategy.step_b_strike_range.threshold_pct}% Spot
+                          ≤ {niftyStrategy.range_filter.threshold_pts} pts
                         </div>
                       </div>
                     </div>
@@ -375,36 +360,36 @@ export default function RecommendationsPage() {
                           Step C: Direction + Volatility Strategy
                         </span>
                         <h3 className="text-xl font-bold text-white flex items-center space-x-2 mt-0.5">
-                          <span>{niftyStrategy.step_c_strategy_execution.strategy_name}</span>
+                          <span>{niftyStrategy.trade_recommendation.strategy_name}</span>
                           <span className={`text-xs px-2 py-0.5 rounded font-mono ${
-                            niftyStrategy.step_c_strategy_execution.direction === "Bullish"
+                            niftyStrategy.market_direction === "BULLISH"
                               ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
                               : "bg-rose-950 text-rose-400 border border-rose-800"
                           }`}>
-                            {niftyStrategy.step_c_strategy_execution.direction}
+                            {niftyStrategy.market_direction}
                           </span>
                         </h3>
                       </div>
 
                       <div className="flex items-center space-x-3 text-xs">
-                        <span className="text-slate-400">VIX Direction:</span>
+                        <span className="text-slate-400">INDIAVIX Regime:</span>
                         <span className="font-semibold text-amber-300 font-mono">
-                          {niftyStrategy.step_c_strategy_execution.vix_state} ({niftyStrategy.vix})
+                          {niftyStrategy.vix_direction} ({niftyStrategy.india_vix})
                         </span>
                       </div>
                     </div>
 
                     <p className="text-xs text-slate-300 leading-relaxed">
-                      {niftyStrategy.step_c_strategy_execution.rationale}
+                      {niftyStrategy.trade_recommendation.rationale}
                     </p>
 
                     {/* Legs execution */}
                     <div className="space-y-2 pt-2">
                       <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                        Exact Option Legs to Execute
+                        Exact Strategy Legs ({niftyStrategy.trade_recommendation.execution_type})
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {niftyStrategy.step_c_strategy_execution.recommended_legs.map((leg, i) => (
+                        {niftyStrategy.trade_recommendation.legs.map((leg, i) => (
                           <div
                             key={i}
                             className="p-3 rounded-lg border border-slate-800 bg-slate-900/90 flex items-center justify-between"
@@ -412,37 +397,34 @@ export default function RecommendationsPage() {
                             <div className="flex items-center space-x-2.5">
                               <span
                                 className={`text-xs font-bold px-2 py-0.5 rounded ${
-                                  leg.action.toUpperCase().includes("BUY")
+                                  leg.toUpperCase().includes("BUY")
                                     ? "bg-emerald-900/60 text-emerald-300 border border-emerald-700"
                                     : "bg-rose-900/60 text-rose-300 border border-rose-700"
                                 }`}
                               >
-                                {leg.action}
+                                {leg.split(" ")[0]}
                               </span>
                               <span className="font-mono font-bold text-white text-sm">
-                                NIFTY {leg.strike} {leg.option_type}
+                                {leg.substring(leg.indexOf(" ") + 1)}
                               </span>
                             </div>
-                            <div className="text-right">
-                              <span className="text-[10px] text-slate-400 block">Est. Premium</span>
-                              <span className="text-sm font-mono text-cyan-300 font-semibold">
-                                ₹{leg.ltp.toFixed(1)}
-                              </span>
-                            </div>
+                            <span className="text-xs font-mono text-cyan-400 font-medium">
+                              Active Leg
+                            </span>
                           </div>
                         ))}
                       </div>
                     </div>
 
                     {/* Naked Alternative */}
-                    {niftyStrategy.step_c_strategy_execution.naked_alternative.available && (
-                      <div className="p-3 rounded-lg border border-indigo-500/20 bg-indigo-950/20 text-xs text-indigo-300 flex items-center justify-between">
+                    {niftyStrategy.naked_alternative && (
+                      <div className="p-3 rounded-lg border border-indigo-500/20 bg-indigo-950/20 text-xs text-indigo-300 flex flex-col md:flex-row md:items-center justify-between gap-2">
                         <div>
-                          <span className="font-semibold text-indigo-200">Single-Leg / Naked Alternative:</span>{" "}
-                          {niftyStrategy.step_c_strategy_execution.naked_alternative.recommendation}
+                          <span className="font-semibold text-indigo-200">Single-Leg Alternative:</span>{" "}
+                          {niftyStrategy.naked_alternative.action}
                         </div>
                         <span className="text-[11px] font-mono text-slate-400">
-                          {niftyStrategy.step_c_strategy_execution.naked_alternative.rule}
+                          {niftyStrategy.naked_alternative.condition}
                         </span>
                       </div>
                     )}
@@ -458,73 +440,23 @@ export default function RecommendationsPage() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                      {/* Expiry Week Gate */}
-                      <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-300">Expiry Week Filter</span>
-                          {niftyStrategy.no_trade_and_exit_rules.expiry_week_warning.is_expiry_week ? (
-                            <span className="text-amber-400 font-bold flex items-center space-x-1">
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              <span>Caution</span>
+                      {niftyStrategy.no_trade_rules.map((rule, idx) => (
+                        <div key={idx} className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-slate-300">{rule.rule}</span>
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                              rule.triggered
+                                ? "bg-amber-950/80 text-amber-300 border border-amber-800"
+                                : "bg-emerald-950/80 text-emerald-300 border border-emerald-800"
+                            }`}>
+                              {rule.status}
                             </span>
-                          ) : (
-                            <span className="text-emerald-400 font-bold flex items-center space-x-1">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Clear</span>
-                            </span>
-                          )}
+                          </div>
+                          <p className="text-slate-400 text-[11px] leading-relaxed">
+                            {rule.detail}
+                          </p>
                         </div>
-                        <p className="text-slate-400 text-[11px]">
-                          {niftyStrategy.no_trade_and_exit_rules.expiry_week_warning.message}
-                        </p>
-                      </div>
-
-                      {/* Max Pain Gate */}
-                      <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-300">Max Pain Strike</span>
-                          <span className="font-mono font-bold text-cyan-400">
-                            {niftyStrategy.no_trade_and_exit_rules.max_pain.strike}
-                          </span>
-                        </div>
-                        <p className="text-slate-400 text-[11px]">
-                          {niftyStrategy.no_trade_and_exit_rules.max_pain.warning}
-                        </p>
-                      </div>
-
-                      {/* Major Reversal Zones */}
-                      <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-300">Major Monthly Reversal Zones</span>
-                          <span className="text-cyan-400 font-mono text-[11px]">
-                            {niftyStrategy.no_trade_and_exit_rules.reversal_zones.status}
-                          </span>
-                        </div>
-                        <p className="text-slate-400 text-[11px]">
-                          To CE Resistance: {niftyStrategy.no_trade_and_exit_rules.reversal_zones.distance_to_major_resistance} pts | 
-                          To PE Support: {niftyStrategy.no_trade_and_exit_rules.reversal_zones.distance_to_major_support} pts.
-                        </p>
-                      </div>
-
-                      {/* VIX Sweet Spot */}
-                      <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-slate-300">VIX Sweet Spot (20 - 25)</span>
-                          {niftyStrategy.no_trade_and_exit_rules.vix_sweet_spot.is_in_sweet_spot ? (
-                            <span className="text-emerald-400 font-bold flex items-center space-x-1">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Optimal</span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 font-mono text-[11px]">
-                              Current VIX: {niftyStrategy.no_trade_and_exit_rules.vix_sweet_spot.current_vix}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-slate-400 text-[11px]">
-                          {niftyStrategy.no_trade_and_exit_rules.vix_sweet_spot.guidance}
-                        </p>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </div>
