@@ -713,10 +713,12 @@ def _get_recommendations_sync() -> Dict[str, Any]:
     except Exception:
         pass
 
-    # 3. Stock Recommendations: Screen Nifty 50 + Watchlist for High-Confidence Opportunities
+    # 3. Stock Recommendations: Screen a focused subset of Top Nifty Liquid Stocks for fast response
     stock_candidates = []
     try:
-        screen_data = _run_screening_sync(NIFTY_50_TICKERS, None, False)
+        # Use a high-liquidity subset (15 tickers) so recommendations return within < 1 second
+        liquid_subset = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "ITC", "LT", "HINDUNILVR", "AXISBANK", "KOTAKBANK", "MARUTI", "BAJFINANCE", "ULTRACEMCO"]
+        screen_data = _run_screening_sync(liquid_subset, None, False)
         stocks = screen_data.get("stocks", [])
 
         # Filter Safe Momentum Buys (Low Risk Score, Positive Price Momentum, Healthy Volume)
