@@ -80,30 +80,45 @@ interface NiftyStrategy {
 }
 
 interface OptionRecommendation {
-  type: string;
-  symbol: string;
-  action: string;
-  strike: number;
-  expiry: string;
-  entry_price_range: string;
-  target: number;
-  stop_loss: number;
-  sentiment: string;
-  rationale: string;
-  risk_level: string;
+  instrument?: string;
+  underlying_price?: number;
+  bias?: string;
+  recommended_action?: string;
+  action?: string;
+  strike?: number;
+  contract_name?: string;
+  estimated_premium?: number;
+  target_premium?: number;
+  stop_loss_premium?: number;
+  strategy?: string;
+  risk_profile?: string;
+  expiry?: string;
+  // legacy/fallback fields
+  symbol?: string;
+  entry_price_range?: string;
+  target?: number;
+  stop_loss?: number;
+  rationale?: string;
 }
 
 interface StockRecommendation {
-  symbol: string;
-  company_name: string;
-  action: string;
-  current_price: number;
-  target_price: number;
-  stop_loss: number;
-  upside_percentage: number;
-  timeframe: string;
-  catalyst: string;
-  risk_level: string;
+  ticker?: string;
+  symbol?: string;
+  category?: string;
+  action?: string;
+  price?: number;
+  current_price?: number;
+  change_1d?: number;
+  target_price?: number;
+  stop_loss_price?: number;
+  stop_loss?: number;
+  risk_reward?: string;
+  risk_score?: number;
+  risk_level?: string;
+  reason?: string;
+  company_name?: string;
+  catalyst?: string;
+  upside_percentage?: number;
 }
 
 export default function RecommendationsPage() {
@@ -185,7 +200,7 @@ export default function RecommendationsPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-slate-800/80 text-cyan-400 border border-slate-700">
-              NIFTY Spot: {niftyStrategy ? niftyStrategy.spot_price.toLocaleString("en-IN") : "..."}
+              NIFTY Spot: {niftyStrategy ? niftyStrategy.spot_price?.toLocaleString("en-IN") : "..."}
             </span>
             <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-slate-800/80 text-amber-400 border border-slate-700">
               INDIA VIX: {niftyStrategy ? `${niftyStrategy.india_vix} (${niftyStrategy.vix_direction})` : "..."}
@@ -242,20 +257,20 @@ export default function RecommendationsPage() {
                       <div className="p-3 rounded-lg border border-emerald-500/20 bg-emerald-950/10">
                         <span className="text-[11px] text-emerald-400 font-medium">Intraday Support (Max PE Chg)</span>
                         <div className="text-xl font-bold font-mono text-emerald-300 mt-1">
-                          {niftyStrategy.pre_trade_setup.intraday.support_strike} PE
+                          {niftyStrategy.pre_trade_setup?.intraday?.support_strike} PE
                         </div>
                         <div className="text-[10px] text-slate-400 mt-0.5">
-                          +{(niftyStrategy.pre_trade_setup.intraday.support_chg_oi / 100000).toFixed(2)}L OI Added
+                          +{((niftyStrategy.pre_trade_setup?.intraday?.support_chg_oi || 0) / 100000).toFixed(2)}L OI Added
                         </div>
                       </div>
 
                       <div className="p-3 rounded-lg border border-rose-500/20 bg-rose-950/10">
                         <span className="text-[11px] text-rose-400 font-medium">Intraday Resistance (Max CE Chg)</span>
                         <div className="text-xl font-bold font-mono text-rose-300 mt-1">
-                          {niftyStrategy.pre_trade_setup.intraday.resistance_strike} CE
+                          {niftyStrategy.pre_trade_setup?.intraday?.resistance_strike} CE
                         </div>
                         <div className="text-[10px] text-slate-400 mt-0.5">
-                          +{(niftyStrategy.pre_trade_setup.intraday.resistance_chg_oi / 100000).toFixed(2)}L OI Added
+                          +{((niftyStrategy.pre_trade_setup?.intraday?.resistance_chg_oi || 0) / 100000).toFixed(2)}L OI Added
                         </div>
                       </div>
                     </div>
@@ -276,20 +291,20 @@ export default function RecommendationsPage() {
                       <div className="p-3 rounded-lg border border-emerald-500/20 bg-emerald-950/10">
                         <span className="text-[11px] text-emerald-400 font-medium">Positional Support (Max PE OI)</span>
                         <div className="text-xl font-bold font-mono text-emerald-300 mt-1">
-                          {niftyStrategy.pre_trade_setup.positional.support_strike} PE
+                          {niftyStrategy.pre_trade_setup?.positional?.support_strike} PE
                         </div>
                         <div className="text-[10px] text-slate-400 mt-0.5">
-                          {(niftyStrategy.pre_trade_setup.positional.support_total_oi / 100000).toFixed(2)}L Total OI
+                          {((niftyStrategy.pre_trade_setup?.positional?.support_total_oi || 0) / 100000).toFixed(2)}L Total OI
                         </div>
                       </div>
 
                       <div className="p-3 rounded-lg border border-rose-500/20 bg-rose-950/10">
                         <span className="text-[11px] text-rose-400 font-medium">Positional Resistance (Max CE OI)</span>
                         <div className="text-xl font-bold font-mono text-rose-300 mt-1">
-                          {niftyStrategy.pre_trade_setup.positional.resistance_strike} CE
+                          {niftyStrategy.pre_trade_setup?.positional?.resistance_strike} CE
                         </div>
                         <div className="text-[10px] text-slate-400 mt-0.5">
-                          {(niftyStrategy.pre_trade_setup.positional.resistance_total_oi / 100000).toFixed(2)}L Total OI
+                          {((niftyStrategy.pre_trade_setup?.positional?.resistance_total_oi || 0) / 100000).toFixed(2)}L Total OI
                         </div>
                       </div>
                     </div>
@@ -324,11 +339,11 @@ export default function RecommendationsPage() {
                           Step B: Strike Range Filter
                         </span>
                         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
-                          !niftyStrategy.range_filter.is_wide_range
+                          !niftyStrategy.range_filter?.is_wide_range
                             ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800"
                             : "bg-amber-950/80 text-amber-400 border border-amber-800"
                         }`}>
-                          {niftyStrategy.range_filter.range_verdict}
+                          {niftyStrategy.range_filter?.range_verdict}
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-1">
@@ -340,13 +355,13 @@ export default function RecommendationsPage() {
                       <div>
                         <div className="text-xs text-slate-400">Spread Distance</div>
                         <div className="text-sm font-mono font-bold text-slate-200">
-                          {niftyStrategy.range_filter.strike_distance} pts
+                          {niftyStrategy.range_filter?.strike_distance} pts
                         </div>
                       </div>
                       <div className="border-l border-slate-700 pl-4">
                         <div className="text-xs text-slate-400">Max Threshold</div>
                         <div className="text-sm font-mono font-bold text-cyan-400">
-                          ≤ {niftyStrategy.range_filter.threshold_pts} pts
+                          ≤ {niftyStrategy.range_filter?.threshold_pts} pts
                         </div>
                       </div>
                     </div>
@@ -360,7 +375,7 @@ export default function RecommendationsPage() {
                           Step C: Direction + Volatility Strategy
                         </span>
                         <h3 className="text-xl font-bold text-white flex items-center space-x-2 mt-0.5">
-                          <span>{niftyStrategy.trade_recommendation.strategy_name}</span>
+                          <span>{niftyStrategy.trade_recommendation?.strategy_name}</span>
                           <span className={`text-xs px-2 py-0.5 rounded font-mono ${
                             niftyStrategy.market_direction === "BULLISH"
                               ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
@@ -380,16 +395,16 @@ export default function RecommendationsPage() {
                     </div>
 
                     <p className="text-xs text-slate-300 leading-relaxed">
-                      {niftyStrategy.trade_recommendation.rationale}
+                      {niftyStrategy.trade_recommendation?.rationale}
                     </p>
 
                     {/* Legs execution */}
                     <div className="space-y-2 pt-2">
                       <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                        Exact Strategy Legs ({niftyStrategy.trade_recommendation.execution_type})
+                        Exact Strategy Legs ({niftyStrategy.trade_recommendation?.execution_type})
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {niftyStrategy.trade_recommendation.legs.map((leg, i) => (
+                        {niftyStrategy.trade_recommendation?.legs?.map((leg, i) => (
                           <div
                             key={i}
                             className="p-3 rounded-lg border border-slate-800 bg-slate-900/90 flex items-center justify-between"
@@ -440,7 +455,7 @@ export default function RecommendationsPage() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                      {niftyStrategy.no_trade_rules.map((rule, idx) => (
+                      {niftyStrategy.no_trade_rules?.map((rule, idx) => (
                         <div key={idx} className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-1">
                           <div className="flex items-center justify-between">
                             <span className="font-semibold text-slate-300">{rule.rule}</span>
@@ -473,43 +488,55 @@ export default function RecommendationsPage() {
                       Additional Options Strategies
                     </h2>
                   </div>
-                  <span className="text-xs text-slate-400">BankNIFTY & High Beta</span>
+                  <span className="text-xs text-slate-400">Index & Stock Options</span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {options.map((opt, i) => (
-                    <div
-                      key={i}
-                      className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition space-y-3"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                            opt.action.toUpperCase() === "BUY" ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-rose-950 text-rose-400 border border-rose-800"
-                          }`}>
-                            {opt.action}
-                          </span>
-                          <span className="font-bold text-white font-mono">{opt.symbol} {opt.strike}</span>
+                  {options.map((opt, i) => {
+                    const actionLabel = (opt.recommended_action || opt.action || opt.bias || "BUY").toUpperCase();
+                    const isBuy = actionLabel.includes("BUY") || actionLabel.includes("CALL") || actionLabel.includes("SPREAD");
+                    const title = opt.contract_name || `${opt.instrument || opt.symbol || "OPTION"} ${opt.strike || ""}`;
+                    const entryPrice = opt.estimated_premium != null ? `₹${opt.estimated_premium}` : (opt.entry_price_range || "Market");
+                    const targetPrice = opt.target_premium != null ? `₹${opt.target_premium}` : (opt.target != null ? `₹${opt.target}` : "N/A");
+                    const stopPrice = opt.stop_loss_premium != null ? `₹${opt.stop_loss_premium}` : (opt.stop_loss != null ? `₹${opt.stop_loss}` : "N/A");
+                    const rationaleText = opt.strategy || opt.rationale || "";
+
+                    return (
+                      <div
+                        key={i}
+                        className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                              isBuy ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-rose-950 text-rose-400 border border-rose-800"
+                            }`}>
+                              {actionLabel}
+                            </span>
+                            <span className="font-bold text-white font-mono text-sm">{title}</span>
+                          </div>
+                          <span className="text-[11px] font-mono text-slate-400">{opt.expiry || "Weekly"}</span>
                         </div>
-                        <span className="text-[11px] font-mono text-slate-400">{opt.expiry}</span>
+                        {rationaleText && (
+                          <p className="text-xs text-slate-300 leading-relaxed">{rationaleText}</p>
+                        )}
+                        <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-800/80 text-[11px] font-mono">
+                          <div>
+                            <span className="text-slate-500 block">Est. Premium</span>
+                            <span className="text-slate-200">{entryPrice}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block">Target</span>
+                            <span className="text-emerald-400">{targetPrice}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block">Stop Loss</span>
+                            <span className="text-rose-400">{stopPrice}</span>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-xs text-slate-300">{opt.rationale}</p>
-                      <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-800/80 text-[11px] font-mono">
-                        <div>
-                          <span className="text-slate-500 block">Entry</span>
-                          <span className="text-slate-200">{opt.entry_price_range}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block">Target</span>
-                          <span className="text-emerald-400">₹{opt.target}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block">Stop Loss</span>
-                          <span className="text-rose-400">₹{opt.stop_loss}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}
@@ -524,42 +551,51 @@ export default function RecommendationsPage() {
                       Top Equity Cash / Swing Ideas
                     </h2>
                   </div>
-                  <span className="text-xs text-slate-400">Institutional Breakout Filters</span>
+                  <span className="text-xs text-slate-400">Low-Risk Momentum & Breakouts</span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {stocks.map((stk, i) => (
-                    <div
-                      key={i}
-                      className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between space-y-3"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-white font-mono">{stk.symbol}</span>
-                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">
-                            +{stk.upside_percentage}% Upside
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">{stk.company_name}</div>
-                        <p className="text-xs text-slate-300 mt-2 leading-relaxed">{stk.catalyst}</p>
-                      </div>
+                  {stocks.map((stk, i) => {
+                    const symbol = stk.ticker || stk.symbol || "";
+                    const price = stk.price != null ? stk.price : stk.current_price;
+                    const change = stk.change_1d != null ? stk.change_1d : (stk.upside_percentage || 0);
+                    const reason = stk.reason || stk.catalyst || "";
+                    const category = stk.category || "MOMENTUM";
+                    const stop = stk.stop_loss_price != null ? stk.stop_loss_price : stk.stop_loss;
 
-                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono">
+                    return (
+                      <div
+                        key={i}
+                        className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between space-y-3"
+                      >
                         <div>
-                          <span className="text-slate-500 block">Current</span>
-                          <span className="text-slate-200">₹{stk.current_price}</span>
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-white font-mono">{symbol}</span>
+                            <span className="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">
+                              {change > 0 ? `+${change.toFixed(1)}%` : `${change.toFixed(1)}%`}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-cyan-400 mt-0.5 font-semibold">{category}</div>
+                          <p className="text-xs text-slate-300 mt-2 leading-relaxed">{reason}</p>
                         </div>
-                        <div>
-                          <span className="text-slate-500 block">Target</span>
-                          <span className="text-emerald-400">₹{stk.target_price}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block">Stop</span>
-                          <span className="text-rose-400">₹{stk.stop_loss}</span>
+
+                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono">
+                          <div>
+                            <span className="text-slate-500 block">Entry</span>
+                            <span className="text-slate-200">{price ? `₹${price}` : "Market"}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block">Target</span>
+                            <span className="text-emerald-400">{stk.target_price ? `₹${stk.target_price}` : "N/A"}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block">Stop</span>
+                            <span className="text-rose-400">{stop ? `₹${stop}` : "N/A"}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}
