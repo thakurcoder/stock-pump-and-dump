@@ -101,25 +101,39 @@ def generate_nifty_option_chain_data(spot: float, spot_prev: float, hv: float, v
 
         # Rough Black-Scholes estimate for option price
         time_to_exp = 3 / 252.0  # ~3 days to weekly expiry
-        call_iv = vix / 100.0
-        d1 = (math.log(spot / s) + (0.07 + 0.5 * call_iv ** 2) * time_to_exp) / (call_iv * math.sqrt(time_to_exp))
-        d2 = d1 - call_iv * math.sqrt(time_to_exp)
-        # Simplified premium proxy
+        call_iv = round(vix + (diff / spot) * 2.5, 2)
+        put_iv = round(vix - (diff / spot) * 2.5, 2)
+        
+        # Premiums
         intrinsic_call = max(0.0, spot - s)
         intrinsic_put = max(0.0, s - spot)
-        extrinsic = spot * call_iv * math.sqrt(time_to_exp) * 0.4 * dist_factor
+        extrinsic = spot * (vix / 100.0) * math.sqrt(time_to_exp) * 0.4 * dist_factor
 
         call_ltp = round(intrinsic_call + extrinsic, 2)
         put_ltp = round(intrinsic_put + extrinsic, 2)
+        
+        # Volume simulation proportional to OI activity
+        call_vol = int(base_call_oi * 0.75 + abs(c_chg) * 1.2)
+        put_vol = int(base_put_oi * 0.75 + abs(p_chg) * 1.2)
 
         chain_rows.append({
             "strike": s,
+            # Calls (CE)
             "call_oi": base_call_oi,
             "call_chg_oi": c_chg,
+            "call_volume": call_vol,
+            "call_iv": call_iv,
             "call_ltp": call_ltp,
-            "put_oi": base_put_oi,
-            "put_chg_oi": p_chg,
+            # Puts (PE)
             "put_ltp": put_ltp,
+            "put_iv": put_iv,
+            "put_volume": put_vol,
+            "put_chg_oi": p_chg,
+            "put_oi": base_put_oi,
+            # Status
+            "is_atm": abs(s - atm_strike) == 0,
+            "is_call_itm": s < spot,
+            "is_put_itm": s > spot,
         })
 
     return {
@@ -399,5 +413,5 @@ def analyze_nifty_options_strategy() -> Dict[str, Any]:
         "trade_recommendation": trade_recommendation,
         "naked_alternative": naked_alternative,
         "no_trade_rules": rules_checklist,
-        "chain_rows": chain_rows[:12],  # Sample strikes for visualization
+        "chain_rows": chain_rows,  # Full strike matrix around spot
     }

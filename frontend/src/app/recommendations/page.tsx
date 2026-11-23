@@ -72,10 +72,17 @@ interface NiftyStrategy {
     strike: number;
     call_oi: number;
     call_chg_oi: number;
+    call_volume?: number;
+    call_iv?: number;
     call_ltp: number;
-    put_oi: number;
-    put_chg_oi: number;
     put_ltp: number;
+    put_iv?: number;
+    put_volume?: number;
+    put_chg_oi: number;
+    put_oi: number;
+    is_atm?: boolean;
+    is_call_itm?: boolean;
+    is_put_itm?: boolean;
   }>;
 }
 
@@ -135,6 +142,10 @@ export default function RecommendationsPage() {
   const [refreshInterval, setRefreshInterval] = useState<number>(60); // seconds (default 60s)
   const [secondsLeft, setSecondsLeft] = useState<number>(60);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+
+  // Option chain strike filter view
+  const [chainStrikeFilter, setChainStrikeFilter] = useState<"all" | "near" | "active">("near");
+  const [showFullChain, setShowFullChain] = useState<boolean>(true);
 
   const fetchRecommendations = async (isBackground: boolean = false) => {
     if (!isBackground) setLoading(true);
@@ -554,6 +565,226 @@ export default function RecommendationsPage() {
                       ))}
                     </div>
                   </div>
+
+                  {/* STEP 4: COMPLETE NIFTY 50 LIVE OPTION CHAIN MATRIX */}
+                  {niftyStrategy.chain_rows && niftyStrategy.chain_rows.length > 0 && (
+                    <div className="space-y-3 pt-4 border-t border-slate-800">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center space-x-2">
+                          <Activity className="w-4 h-4 text-cyan-400" />
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                            4. Complete NIFTY 50 Live Option Chain Table
+                          </h4>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+                            {niftyStrategy.chain_rows.length} Strikes Loaded
+                          </span>
+                        </div>
+
+                        {/* Controls */}
+                        <div className="flex items-center space-x-2">
+                          <div className="flex items-center bg-slate-800/80 rounded-lg p-0.5 text-[11px] font-mono border border-slate-700">
+                            <button
+                              onClick={() => setChainStrikeFilter("near")}
+                              className={`px-2 py-0.5 rounded ${
+                                chainStrikeFilter === "near" ? "bg-cyan-600 text-white font-semibold" : "text-slate-400 hover:text-white"
+                              }`}
+                            >
+                              Near ATM (±10)
+                            </button>
+                            <button
+                              onClick={() => setChainStrikeFilter("all")}
+                              className={`px-2 py-0.5 rounded ${
+                                chainStrikeFilter === "all" ? "bg-cyan-600 text-white font-semibold" : "text-slate-400 hover:text-white"
+                              }`}
+                            >
+                              Full Chain (All)
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => setShowFullChain(!showFullChain)}
+                            className="text-[11px] font-medium text-slate-400 hover:text-cyan-300 px-2 py-1 rounded bg-slate-900 border border-slate-800 transition"
+                          >
+                            {showFullChain ? "Collapse Table" : "Expand Table"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {showFullChain && (
+                        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/80 shadow-2xl">
+                          <table className="w-full text-xs text-left border-collapse font-mono">
+                            <thead>
+                              {/* Header Top Layer */}
+                              <tr className="border-b border-slate-800 text-[11px] font-bold">
+                                <th colSpan={5} className="py-2.5 px-3 text-center bg-cyan-950/40 text-cyan-300 border-r border-slate-800">
+                                  CALLS (CE)
+                                </th>
+                                <th className="py-2.5 px-3 text-center bg-slate-900 text-amber-300 border-r border-slate-800">
+                                  STRIKE
+                                </th>
+                                <th colSpan={5} className="py-2.5 px-3 text-center bg-indigo-950/40 text-indigo-300">
+                                  PUTS (PE)
+                                </th>
+                              </tr>
+                              {/* Column Names */}
+                              <tr className="border-b border-slate-800 text-[10px] text-slate-400 bg-slate-900/90 font-semibold tracking-wider">
+                                <th className="py-2 px-2.5 text-right">OI</th>
+                                <th className="py-2 px-2.5 text-right">CHG IN OI</th>
+                                <th className="py-2 px-2.5 text-right">VOLUME</th>
+                                <th className="py-2 px-2 text-right">IV%</th>
+                                <th className="py-2 px-3 text-right text-cyan-300 border-r border-slate-800">LTP (₹)</th>
+                                
+                                <th className="py-2 px-4 text-center font-bold text-white bg-slate-800/90 border-r border-slate-800">
+                                  PRICE
+                                </th>
+
+                                <th className="py-2 px-3 text-left text-indigo-300">LTP (₹)</th>
+                                <th className="py-2 px-2 text-right">IV%</th>
+                                <th className="py-2 px-2.5 text-right">VOLUME</th>
+                                <th className="py-2 px-2.5 text-right">CHG IN OI</th>
+                                <th className="py-2 px-2.5 text-right">OI</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-900/70">
+                              {niftyStrategy.chain_rows
+                                .filter((row) => {
+                                  if (chainStrikeFilter === "near") {
+                                    const atm = Math.round(niftyStrategy.spot_price / 50) * 50;
+                                    return Math.abs(row.strike - atm) <= 500;
+                                  }
+                                  return true;
+                                })
+                                .map((row) => {
+                                  const isAtm = row.is_atm || Math.abs(row.strike - niftyStrategy.spot_price) < 25;
+                                  const isCallSupport = row.strike === niftyStrategy.pre_trade_setup?.intraday?.resistance_strike;
+                                  const isPutSupport = row.strike === niftyStrategy.pre_trade_setup?.intraday?.support_strike;
+                                  const isMaxPain = row.strike === niftyStrategy.max_pain_strike;
+
+                                  // ITM highlighting
+                                  const callBg = row.is_call_itm
+                                    ? "bg-cyan-950/20"
+                                    : "bg-slate-950/40";
+                                  const putBg = row.is_put_itm
+                                    ? "bg-indigo-950/20"
+                                    : "bg-slate-950/40";
+
+                                  return (
+                                    <tr
+                                      key={row.strike}
+                                      className={`hover:bg-slate-800/50 transition-colors text-[11px] ${
+                                        isAtm ? "bg-amber-950/25 ring-1 ring-inset ring-amber-500/30" : ""
+                                      }`}
+                                    >
+                                      {/* CALLS */}
+                                      <td className={`py-1.5 px-2.5 text-right font-mono ${callBg} ${
+                                        isCallSupport ? "font-bold text-rose-300" : "text-slate-300"
+                                      }`}>
+                                        {row.call_oi.toLocaleString("en-IN")}
+                                      </td>
+                                      <td className={`py-1.5 px-2.5 text-right font-mono ${callBg} ${
+                                        row.call_chg_oi > 0
+                                          ? "text-emerald-400"
+                                          : row.call_chg_oi < 0
+                                          ? "text-rose-400 font-bold"
+                                          : "text-slate-400"
+                                      }`}>
+                                        {row.call_chg_oi > 0 ? `+${row.call_chg_oi.toLocaleString("en-IN")}` : row.call_chg_oi.toLocaleString("en-IN")}
+                                      </td>
+                                      <td className={`py-1.5 px-2.5 text-right text-slate-400 ${callBg}`}>
+                                        {(row.call_volume || 0).toLocaleString("en-IN")}
+                                      </td>
+                                      <td className={`py-1.5 px-2 text-right text-slate-400 ${callBg}`}>
+                                        {row.call_iv ? `${row.call_iv}%` : "-"}
+                                      </td>
+                                      <td className={`py-1.5 px-3 text-right font-bold text-cyan-300 border-r border-slate-800 ${callBg}`}>
+                                        ₹{row.call_ltp.toFixed(2)}
+                                      </td>
+
+                                      {/* STRIKE */}
+                                      <td className={`py-1.5 px-4 text-center font-bold font-mono border-r border-slate-800 ${
+                                        isAtm
+                                          ? "bg-amber-500/20 text-amber-200"
+                                          : "bg-slate-900 text-white"
+                                      }`}>
+                                        <div className="flex items-center justify-center space-x-1">
+                                          <span>{row.strike}</span>
+                                          {isAtm && (
+                                            <span className="text-[9px] px-1 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                                              ATM
+                                            </span>
+                                          )}
+                                          {isCallSupport && (
+                                            <span className="text-[9px] px-1 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                              RES
+                                            </span>
+                                          )}
+                                          {isPutSupport && (
+                                            <span className="text-[9px] px-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                              SUP
+                                            </span>
+                                          )}
+                                          {isMaxPain && (
+                                            <span className="text-[9px] px-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                              PAIN
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+
+                                      {/* PUTS */}
+                                      <td className={`py-1.5 px-3 text-left font-bold text-indigo-300 ${putBg}`}>
+                                        ₹{row.put_ltp.toFixed(2)}
+                                      </td>
+                                      <td className={`py-1.5 px-2 text-right text-slate-400 ${putBg}`}>
+                                        {row.put_iv ? `${row.put_iv}%` : "-"}
+                                      </td>
+                                      <td className={`py-1.5 px-2.5 text-right text-slate-400 ${putBg}`}>
+                                        {(row.put_volume || 0).toLocaleString("en-IN")}
+                                      </td>
+                                      <td className={`py-1.5 px-2.5 text-right font-mono ${putBg} ${
+                                        row.put_chg_oi > 0
+                                          ? "text-emerald-400 font-bold"
+                                          : row.put_chg_oi < 0
+                                          ? "text-rose-400"
+                                          : "text-slate-400"
+                                      }`}>
+                                        {row.put_chg_oi > 0 ? `+${row.put_chg_oi.toLocaleString("en-IN")}` : row.put_chg_oi.toLocaleString("en-IN")}
+                                      </td>
+                                      <td className={`py-1.5 px-2.5 text-right font-mono ${putBg} ${
+                                        isPutSupport ? "font-bold text-emerald-300" : "text-slate-300"
+                                      }`}>
+                                        {row.put_oi.toLocaleString("en-IN")}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                            </tbody>
+                          </table>
+
+                          {/* Legend Bar */}
+                          <div className="p-2.5 bg-slate-900 border-t border-slate-800 flex flex-wrap items-center justify-between text-[10px] text-slate-400 gap-2 font-mono">
+                            <div className="flex items-center space-x-3">
+                              <span className="flex items-center space-x-1">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-cyan-950/70 border border-cyan-700"></span>
+                                <span>In-The-Money (ITM Calls)</span>
+                              </span>
+                              <span className="flex items-center space-x-1">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-indigo-950/70 border border-indigo-700"></span>
+                                <span>In-The-Money (ITM Puts)</span>
+                              </span>
+                              <span className="flex items-center space-x-1">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-400"></span>
+                                <span>At-The-Money (ATM)</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span>* Spot Price: ₹{niftyStrategy.spot_price.toLocaleString("en-IN")}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </section>
             )}
