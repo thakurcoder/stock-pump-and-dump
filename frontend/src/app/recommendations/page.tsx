@@ -127,10 +127,18 @@ export default function RecommendationsPage() {
   const [stocks, setStocks] = useState<StockRecommendation[]>([]);
   const [disclaimer, setDisclaimer] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchRecommendations = async () => {
-    setLoading(true);
+  // Auto-refresh states
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
+  const [refreshInterval, setRefreshInterval] = useState<number>(60); // seconds (default 60s)
+  const [secondsLeft, setSecondsLeft] = useState<number>(60);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+
+  const fetchRecommendations = async (isBackground: boolean = false) => {
+    if (!isBackground) setLoading(true);
+    setIsRefreshing(true);
     setError(null);
     try {
       const res = await fetch("http://localhost:8000/api/recommendations");
@@ -140,16 +148,45 @@ export default function RecommendationsPage() {
       setOptions(data.options_recommendations || []);
       setStocks(data.stocks_recommendations || []);
       setDisclaimer(data.disclaimer || "");
+      setLastRefreshedAt(new Date());
+      setSecondsLeft(refreshInterval);
     } catch (err: any) {
-      setError(err.message || "Failed to load live recommendations.");
+      if (!isBackground) {
+        setError(err.message || "Failed to load live recommendations.");
+      }
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
+  // Initial fetch
   useEffect(() => {
-    fetchRecommendations();
+    fetchRecommendations(false);
   }, []);
+
+  // Interval timer for auto-refresh countdown
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          fetchRecommendations(true);
+          return refreshInterval;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [autoRefresh, refreshInterval]);
+
+  // Reset countdown whenever user changes refreshInterval
+  const handleIntervalChange = (newInterval: number) => {
+    setRefreshInterval(newInterval);
+    setSecondsLeft(newInterval);
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30">
@@ -167,14 +204,57 @@ export default function RecommendationsPage() {
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Auto-refresh control group */}
+          <div className="flex items-center space-x-2 bg-slate-800/80 border border-slate-700/80 px-2.5 py-1.5 rounded-lg text-xs">
+            {/* Toggle Switch */}
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
+              <span className="ml-2 font-medium text-slate-300 select-none">
+                Auto-Refresh
+              </span>
+            </label>
+
+            {/* Interval Selector */}
+            <select
+              value={refreshInterval}
+              disabled={!autoRefresh}
+              onChange={(e) => handleIntervalChange(Number(e.target.value))}
+              aria-label="Refresh Interval"
+              className={`bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-[11px] font-mono text-cyan-300 focus:outline-none focus:border-cyan-500 transition ${
+                !autoRefresh ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+              }`}
+            >
+              <option value={15}>15s (Ultra Fast)</option>
+              <option value={30}>30s (Fast)</option>
+              <option value={60}>1m (Standard)</option>
+              <option value={180}>3m (NSE Snapshot)</option>
+              <option value={300}>5m (Position)</option>
+            </select>
+
+            {/* Countdown Badge */}
+            {autoRefresh && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 shrink-0">
+                {secondsLeft}s
+              </span>
+            )}
+          </div>
+
+          {/* Manual Refresh Button */}
           <button
-            onClick={fetchRecommendations}
-            className="flex items-center space-x-2 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition"
+            onClick={() => fetchRecommendations(false)}
+            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-cyan-400" : ""}`} />
-            <span>Refresh Chain</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-cyan-400" : ""}`} />
+            <span>Refresh</span>
           </button>
+
           <Link
             href="/"
             className="text-xs font-semibold px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition shadow-sm"
