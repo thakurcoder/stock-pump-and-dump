@@ -341,43 +341,73 @@ def _fetch_indices_sync() -> List[Dict[str, Any]]:
     if cached_data and (now - cached_time < INDEX_CACHE_TTL):
         return cached_data
 
-    index_map = [
-        ("^NSEI", "NIFTY 50"),
-        ("^NSEBANK", "NIFTY BANK"),
-        ("^CNXIT", "NIFTY IT"),
-    ]
     results = []
+    # 1. Primary: Authentic Live NSE India AllIndices API
     try:
-        import yfinance as yf
-        for symbol, name in index_map:
-            try:
-                t = yf.Ticker(symbol)
-                h = t.history(period="5d")
-                if len(h) >= 2:
-                    c_last = float(h["Close"].iloc[-1])
-                    c_prev = float(h["Close"].iloc[-2])
-                    chg = c_last - c_prev
-                    chg_pct = (chg / c_prev) * 100 if c_prev != 0 else 0.0
+        from curl_cffi import requests
+        s = requests.Session(impersonate="chrome120")
+        s.get("https://www.nseindia.com", timeout=5)
+        r = s.get("https://www.nseindia.com/api/allIndices", timeout=5)
+        if r.status_code == 200:
+            target_names = {
+                "NIFTY 50": "NIFTY 50",
+                "NIFTY BANK": "NIFTY BANK",
+                "NIFTY IT": "NIFTY IT",
+            }
+            indices_data = r.json().get("data", [])
+            for item in indices_data:
+                name = item.get("index")
+                if name in target_names:
+                    val = float(item.get("last", 0.0))
+                    var = float(item.get("variation", 0.0))
+                    pct = float(item.get("percentChange", 0.0))
                     results.append({
-                        "symbol": name,
-                        "value": round(c_last, 2),
-                        "change": round(chg, 2),
-                        "change_percent": round(chg_pct, 2),
-                        "positive": chg >= 0,
+                        "symbol": target_names[name],
+                        "value": round(val, 2),
+                        "change": round(var, 2),
+                        "change_percent": round(pct, 2),
+                        "positive": var >= 0,
                     })
-                elif len(h) == 1:
-                    c_last = float(h["Close"].iloc[-1])
-                    results.append({
-                        "symbol": name,
-                        "value": round(c_last, 2),
-                        "change": 0.0,
-                        "change_percent": 0.0,
-                        "positive": True,
-                    })
-            except Exception:
-                continue
     except Exception:
-        pass
+        results = []
+
+    # 2. Fallback to Yahoo Finance if NSE was temporarily blocked
+    if not results:
+        index_map = [
+            ("^NSEI", "NIFTY 50"),
+            ("^NSEBANK", "NIFTY BANK"),
+            ("^CNXIT", "NIFTY IT"),
+        ]
+        try:
+            import yfinance as yf
+            for symbol, name in index_map:
+                try:
+                    t = yf.Ticker(symbol)
+                    h = t.history(period="5d")
+                    if len(h) >= 2:
+                        c_last = float(h["Close"].iloc[-1])
+                        c_prev = float(h["Close"].iloc[-2])
+                        chg = c_last - c_prev
+                        chg_pct = (chg / c_prev) * 100 if c_prev != 0 else 0.0
+                        results.append({
+                            "symbol": name,
+                            "value": round(c_last, 2),
+                            "change": round(chg, 2),
+                            "change_percent": round(chg_pct, 2),
+                            "positive": chg >= 0,
+                        })
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    if results:
+        _indices_cache = (now, results)
+        return results
+    elif cached_data:
+        return cached_data
+
+    return []
 
     if not results and cached_data:
         return cached_data
