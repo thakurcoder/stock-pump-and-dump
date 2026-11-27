@@ -3,22 +3,25 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  ShieldCheck,
-  ShieldAlert,
-  AlertTriangle,
-  Flame,
+  Activity,
+  Terminal,
+  TrendingUp,
+  TrendingDown,
   Search,
   RefreshCw,
   Compass,
   ListFilter,
-  TrendingUp,
-  TrendingDown,
-  ArrowRight,
-  HelpCircle,
-  Activity,
+  ShieldAlert,
+  Flame,
+  Zap,
+  Cpu,
+  BarChart2,
+  Maximize2,
   Layers,
-  Sparkles,
-  CheckCircle,
+  ArrowUpRight,
+  ArrowDownRight,
+  Radio,
+  SlidersHorizontal,
 } from "lucide-react";
 import StockDetailPanel, { type Stock } from "./components/StockDetailPanel";
 import WatchlistModal from "./components/WatchlistModal";
@@ -33,21 +36,41 @@ interface MarketIndex {
   positive: boolean;
 }
 
-export default function Dashboard() {
+export default function TerminalDashboard() {
   const [indices, setIndices] = useState<MarketIndex[]>([]);
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [riskFilter, setRiskFilter] = useState<"ALL" | "SAFE" | "ATTENTION" | "DANGER">("ALL");
+  const [riskFilter, setRiskFilter] = useState<"ALL" | "EXTREME" | "HIGH" | "MEDIUM" | "LOW">("ALL");
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
   const [marketStatus, setMarketStatus] = useState("closed");
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
   const [universe, setUniverse] = useState<"nifty50" | "watchlist">("nifty50");
   const [analyzingTicker, setAnalyzingTicker] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [lastTickTime, setLastTickTime] = useState<string>("");
   const [suggestions, setSuggestions] = useState<Array<{ ticker: string; name: string; exchange: string }>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Keyboard shortcut listener for terminal efficiency
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "1") {
+        setUniverse("nifty50");
+      } else if (e.key === "2") {
+        setUniverse("watchlist");
+      } else if (e.key === "r" || e.key === "R") {
+        fetchData();
+      } else if (e.key === "/") {
+        e.preventDefault();
+        document.getElementById("terminal-search")?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [universe]);
 
   // Search autocomplete
   useEffect(() => {
@@ -65,7 +88,7 @@ export default function Dashboard() {
           setSuggestions(d.results || []);
         }
       } catch (err) {}
-    }, 200);
+    }, 150);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -88,7 +111,7 @@ export default function Dashboard() {
     try {
       const res = await fetch(`${API_BASE}/api/stock/${encodeURIComponent(clean)}`);
       if (!res.ok) {
-        throw new Error(`Stock '${clean}' not found on NSE.`);
+        throw new Error(`TICKER '${clean}' REJECTED OR NOT TRADED ON NSE.`);
       }
       const data = await res.json();
       const syntheticStock: Stock = {
@@ -117,7 +140,7 @@ export default function Dashboard() {
       setSelectedStock(syntheticStock);
       setSearchQuery("");
     } catch (err: any) {
-      setSearchError(err?.message || `Failed to analyze stock ${clean}`);
+      setSearchError(err?.message || `ERR: UNABLE TO RESOLVE ${clean}`);
     } finally {
       setAnalyzingTicker(false);
     }
@@ -141,8 +164,9 @@ export default function Dashboard() {
         const d = await screenRes.json();
         setStocks(d.stocks || []);
       }
+      setLastTickTime(new Date().toLocaleTimeString("en-IN", { hour12: false }));
     } catch (err: any) {
-      setError("Failed to connect to stock server. Please verify backend is running.");
+      setError("COMMUNICATION ERROR: UPSTREAM FEED DOWN");
     } finally {
       setLoading(false);
     }
@@ -150,476 +174,383 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(() => fetchData(), 60_000);
+    const interval = setInterval(() => fetchData(), 30_000);
     return () => clearInterval(interval);
   }, [universe]);
-
-  // Map 1st-standard friendly risk buckets
-  const getSimpleStatus = (level: string) => {
-    const l = level.toUpperCase();
-    if (l === "LOW") {
-      return {
-        label: "SAFE TO BUY",
-        sub: "Normal trading, genuine buyers",
-        badge: "bg-emerald-950/80 text-emerald-300 border-emerald-500/40",
-        traffic: "bg-emerald-400",
-        icon: ShieldCheck,
-        type: "SAFE",
-      };
-    } else if (l === "MEDIUM") {
-      return {
-        label: "WATCH CAREFULLY",
-        sub: "Moving fast, keep eyes open",
-        badge: "bg-amber-950/80 text-amber-300 border-amber-500/40",
-        traffic: "bg-amber-400",
-        icon: AlertTriangle,
-        type: "ATTENTION",
-      };
-    } else {
-      return {
-        label: "DANGER / TRAP",
-        sub: "Fake volume or operator pump",
-        badge: "bg-rose-950/80 text-rose-300 border-rose-500/40",
-        traffic: "bg-rose-500 animate-pulse",
-        icon: Flame,
-        type: "DANGER",
-      };
-    }
-  };
 
   const filteredStocks = stocks.filter((s) => {
     const q = searchQuery.toLowerCase();
     const matchSearch =
       s.ticker.toLowerCase().includes(q) || s.exchange.toLowerCase().includes(q);
-
-    const status = getSimpleStatus(s.risk_level);
     const matchFilter =
-      riskFilter === "ALL" || status.type === riskFilter;
-
+      riskFilter === "ALL" || s.risk_level.toUpperCase() === riskFilter;
     return matchSearch && matchFilter;
   });
 
-  const safeCount = stocks.filter((s) => s.risk_level.toUpperCase() === "LOW").length;
-  const watchCount = stocks.filter((s) => s.risk_level.toUpperCase() === "MEDIUM").length;
-  const dangerCount = stocks.filter((s) => ["HIGH", "EXTREME"].includes(s.risk_level.toUpperCase())).length;
+  const extremeCount = stocks.filter((s) => s.risk_level.toUpperCase() === "EXTREME").length;
+  const highCount = stocks.filter((s) => s.risk_level.toUpperCase() === "HIGH").length;
+  const medCount = stocks.filter((s) => s.risk_level.toUpperCase() === "MEDIUM").length;
+  const lowCount = stocks.filter((s) => s.risk_level.toUpperCase() === "LOW").length;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#050b14] text-slate-100 font-sans selection:bg-emerald-500/30">
-      {/* ── TOP NAVIGATION BAR ── */}
-      <header className="sticky top-0 z-40 border-b border-[#142338] bg-[#081220]/95 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="h-20 flex items-center justify-between gap-4">
-            {/* Brand Logo & Child-Friendly Title */}
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-[#0c1a2e] border-2 border-[#1e3a5f] flex items-center justify-center shadow-lg shadow-black/40">
-                <ShieldCheck className="w-7 h-7 text-emerald-400" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                    Stock Guardian
-                  </h1>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
-                    LIVE
-                  </span>
-                </div>
-                <p className="text-xs font-semibold text-slate-400">
-                  Traffic Light System for Safe vs Dangerous Stocks
-                </p>
-              </div>
+    <div className="min-h-screen flex flex-col bg-[#070709] text-[#e1e4ea] font-mono selection:bg-[#00f5a0]/30 selection:text-white antialiased">
+      {/* ── TOP TERMINAL TICKER / SYSTEM STATUS ── */}
+      <header className="border-b border-[#1c1f26] bg-[#0c0d12] sticky top-0 z-40">
+        {/* Terminal Header Row 1 */}
+        <div className="px-5 py-3 border-b border-[#1c1f26] flex flex-wrap items-center justify-between text-sm gap-3">
+          <div className="flex items-center gap-3">
+            {/* Terminal Logo */}
+            <div className="flex items-center gap-2.5">
+              <span className="w-3 h-3 rounded-full bg-[#00f5a0] animate-ping" />
+              <span className="font-black text-base sm:text-lg tracking-wider text-white uppercase flex items-center gap-2">
+                <Terminal className="w-5 h-5 text-[#00f5a0]" />
+                SENTINEL//TERMINAL <span className="text-xs text-slate-500 font-normal">v2.4 PRO</span>
+              </span>
             </div>
-
-            {/* Top Right Action Buttons */}
-            <div className="flex items-center gap-3">
-              {/* Market Status (Green = Open, Grey = Closed) */}
-              <div
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold ${
-                  marketStatus === "open"
-                    ? "bg-[#092218] border-emerald-500/40 text-emerald-300"
-                    : "bg-[#0c1a2e] border-[#1e3a5f] text-slate-400"
-                }`}
-              >
-                <span
-                  className={`w-2.5 h-2.5 rounded-full ${
-                    marketStatus === "open" ? "bg-emerald-400 animate-ping" : "bg-slate-500"
-                  }`}
-                />
-                <span>{marketStatus === "open" ? "Indian Market Open" : "Market Closed"}</span>
-              </div>
-
-              {/* Big Direct Button to Trading Recommendations */}
-              <Link
-                href="/recommendations"
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0d223a] hover:bg-[#122e4e] text-emerald-300 border border-emerald-500/30 text-xs sm:text-sm font-bold shadow-md transition-all hover:scale-[1.02]"
-              >
-                <Compass className="w-4 h-4 text-emerald-400" />
-                <span>NIFTY Options &amp; Ideas &rarr;</span>
-              </Link>
-
-              {/* Refresh Button */}
-              <button
-                onClick={() => fetchData()}
-                disabled={loading}
-                title="Refresh stock prices"
-                aria-label="Refresh stock prices"
-                className="p-2.5 rounded-xl bg-[#0c1a2e] hover:bg-[#122846] border border-[#1e3a5f] text-slate-300 hover:text-white transition disabled:opacity-50"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-emerald-400" : ""}`} />
-              </button>
-            </div>
-          </div>
-
-          {/* Indices Bar */}
-          <div className="border-t border-[#142338] py-2 flex items-center gap-4 overflow-x-auto text-xs whitespace-nowrap scrollbar-none">
-            <span className="flex items-center gap-1.5 font-bold text-slate-400 uppercase tracking-wider text-[11px]">
-              <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              Live Market Meters:
+            <span className="hidden sm:inline text-slate-600">|</span>
+            <span className="hidden sm:flex items-center gap-1.5 text-xs text-slate-300">
+              STATUS:{" "}
+              <span className={marketStatus === "open" ? "text-[#00f5a0] font-bold" : "text-amber-400 font-bold"}>
+                {marketStatus === "open" ? "FEED:LIVE (NSE)" : "FEED:OFFLINE (POST-MARKET)"}
+              </span>
             </span>
-            {indices.map((idx) => (
-              <div
-                key={idx.symbol}
-                className="flex items-center gap-2 px-3 py-1 rounded-lg bg-[#0c1a2e] border border-[#142944] font-medium"
-              >
-                <span className="text-slate-300 font-bold">{idx.symbol}</span>
-                <span className="font-mono text-white font-bold">{idx.value.toLocaleString("en-IN")}</span>
-                <span className={`font-mono font-bold flex items-center gap-0.5 ${idx.positive ? "text-emerald-400" : "text-rose-400"}`}>
-                  {idx.positive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {idx.positive ? "+" : ""}
-                  {idx.change_percent.toFixed(2)}%
-                </span>
-              </div>
-            ))}
           </div>
+
+          <div className="flex items-center gap-3">
+            {/* Quick hotkeys bar */}
+            <div className="hidden lg:flex items-center gap-2 text-xs text-slate-300 border border-[#1f222b] px-2.5 py-1 rounded bg-[#101217]">
+              <span>KEYS:</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-[#1c202a] text-[#00f5a0] font-bold">1</kbd> NIFTY
+              <kbd className="px-1.5 py-0.5 rounded bg-[#1c202a] text-[#00f5a0] font-bold">2</kbd> WATCHLIST
+              <kbd className="px-1.5 py-0.5 rounded bg-[#1c202a] text-[#00f5a0] font-bold">R</kbd> REFRESH
+              <kbd className="px-1.5 py-0.5 rounded bg-[#1c202a] text-[#00f5a0] font-bold">/</kbd> FIND
+            </div>
+
+            <span className="text-xs text-slate-300">
+              SYS-TIME: <span className="text-white font-bold">{lastTickTime || "SYNCING"}</span>
+            </span>
+
+            {/* Direct F&O Desk Button */}
+            <Link
+              href="/recommendations"
+              className="px-3.5 py-1.5 bg-[#101b2a] hover:bg-[#16273e] text-[#00d2ff] border border-[#00d2ff]/40 rounded text-xs sm:text-sm font-black uppercase tracking-wider flex items-center gap-2 transition"
+            >
+              <Compass className="w-4 h-4 text-[#00d2ff]" />
+              <span>F&amp;O Options Desk &rarr;</span>
+            </Link>
+
+            {/* Refresh */}
+            <button
+              onClick={() => fetchData()}
+              disabled={loading}
+              title="Force Refresh (Key: R)"
+              aria-label="Force Refresh"
+              className="p-1.5 rounded bg-[#161820] hover:bg-[#202430] border border-[#252a36] text-slate-300 hover:text-white transition disabled:opacity-40"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-[#00f5a0]" : ""}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Live Index Quotes Bar (Bloomberg Ticker Ribbon) */}
+        <div className="px-5 py-2 bg-[#08090c] overflow-x-auto flex items-center gap-8 text-xs sm:text-sm whitespace-nowrap scrollbar-none border-b border-[#161820]">
+          <span className="text-xs text-slate-400 font-bold tracking-widest uppercase flex items-center gap-1.5 shrink-0">
+            <Radio className="w-3.5 h-3.5 text-[#00f5a0] animate-pulse" />
+            BENCHMARKS:
+          </span>
+          {indices.map((idx) => (
+            <div key={idx.symbol} className="flex items-center gap-2.5 shrink-0">
+              <span className="text-slate-300 font-bold">{idx.symbol}</span>
+              <span className="text-white font-bold">{idx.value.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              <span className={`flex items-center text-xs font-black ${idx.positive ? "text-[#00f5a0]" : "text-[#ff3b69]"}`}>
+                {idx.positive ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                {idx.positive ? "+" : ""}
+                {idx.change.toFixed(2)} ({idx.change_percent.toFixed(2)}%)
+              </span>
+            </div>
+          ))}
         </div>
       </header>
 
-      {/* ── MAIN CONTENT AREA ── */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-7">
+      {/* ── TERMINAL COMMAND & METRICS DECK ── */}
+      <main className="flex-1 max-w-[1700px] w-full mx-auto p-4 sm:p-5 space-y-4">
         
-        {/* 1ST-STANDARD SIMPLE TRAFFIC LIGHT EXPLAINER CARD */}
-        <div className="rounded-3xl border border-[#162d4c] bg-gradient-to-b from-[#091526] to-[#07111f] p-6 shadow-2xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-widest font-mono">
-                <Sparkles className="w-4 h-4" />
-                <span>Super Simple Rule For Beginners</span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
-                How To Read Any Stock In 3 Seconds
-              </h2>
+        {/* Top Summary / Anomaly Counter Banner */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+          {/* Active Universe Box */}
+          <div className="p-3.5 bg-[#0d0f14] border border-[#1c1f26] rounded flex flex-col justify-between">
+            <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">ACTIVE FEED</span>
+            <div className="text-base sm:text-lg font-black text-white mt-1">
+              {universe === "nifty50" ? "NIFTY 50 (TOP CAPS)" : "CUSTOM WATCHLIST"}
             </div>
-            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-[#12243d] text-slate-300 border border-[#1e3a5f] self-start sm:self-auto">
-              Follow The Colors Like Traffic Lights 🚦
-            </span>
+            <span className="text-xs text-[#00d2ff] font-bold">SCANNING {stocks.length} SECURITIES</span>
           </div>
 
-          {/* 3 Large Child-Friendly Traffic Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-            {/* Green / Safe */}
-            <div
-              onClick={() => setRiskFilter("SAFE")}
-              className={`cursor-pointer p-4 rounded-2xl border transition-all ${
-                riskFilter === "SAFE"
-                  ? "bg-[#082419] border-emerald-400 ring-2 ring-emerald-500/30"
-                  : "bg-[#0b1b2d] border-[#183457] hover:border-emerald-500/50"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-4 h-4 rounded-full bg-emerald-400 shadow-md shadow-emerald-400/50" />
-                  <span className="text-base font-black text-emerald-300">GREEN = SAFE</span>
-                </div>
-                <span className="text-xs font-mono font-black px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-                  {safeCount} Stocks
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-2 font-medium leading-relaxed">
-                Real buyers, honest companies. No fake pump. Good for normal investing.
-              </p>
-            </div>
+          {/* Normal/Safe count */}
+          <div className="p-3.5 bg-[#0d0f14] border border-[#1c1f26] rounded flex flex-col justify-between">
+            <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">NORMAL FLOW</span>
+            <div className="text-2xl font-black text-[#00f5a0] mt-1">{lowCount} STOCKS</div>
+            <span className="text-xs text-slate-400 font-semibold">INSTITUTIONAL FLOW</span>
+          </div>
 
-            {/* Amber / Watch */}
-            <div
-              onClick={() => setRiskFilter("ATTENTION")}
-              className={`cursor-pointer p-4 rounded-2xl border transition-all ${
-                riskFilter === "ATTENTION"
-                  ? "bg-[#291e0a] border-amber-400 ring-2 ring-amber-500/30"
-                  : "bg-[#0b1b2d] border-[#183457] hover:border-amber-500/50"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-4 h-4 rounded-full bg-amber-400 shadow-md shadow-amber-400/50" />
-                  <span className="text-base font-black text-amber-300">YELLOW = WATCH</span>
-                </div>
-                <span className="text-xs font-mono font-black px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800">
-                  {watchCount} Stocks
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-2 font-medium leading-relaxed">
-                Price is running fast. Can give profit, but keep a safety stop loss.
-              </p>
-            </div>
+          {/* Medium count */}
+          <div className="p-3.5 bg-[#0d0f14] border border-[#1c1f26] rounded flex flex-col justify-between">
+            <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">MOMENTUM</span>
+            <div className="text-2xl font-black text-amber-400 mt-1">{medCount} STOCKS</div>
+            <span className="text-xs text-slate-400 font-semibold">ELEVATED VOL / RSI</span>
+          </div>
 
-            {/* Red / Danger */}
-            <div
-              onClick={() => setRiskFilter("DANGER")}
-              className={`cursor-pointer p-4 rounded-2xl border transition-all ${
-                riskFilter === "DANGER"
-                  ? "bg-[#2a0e14] border-rose-400 ring-2 ring-rose-500/30"
-                  : "bg-[#0b1b2d] border-[#183457] hover:border-rose-500/50"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-4 h-4 rounded-full bg-rose-500 animate-pulse shadow-md shadow-rose-500/50" />
-                  <span className="text-base font-black text-rose-300">RED = TRAP / DANGER</span>
-                </div>
-                <span className="text-xs font-mono font-black px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800">
-                  {dangerCount} Stocks
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-2 font-medium leading-relaxed">
-                Fake volume trap. People pump price up to dump it later. Do NOT buy blindly!
-              </p>
-            </div>
+          {/* High Alert count */}
+          <div className="p-3.5 bg-[#0d0f14] border border-[#1c1f26] rounded flex flex-col justify-between">
+            <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">HIGH ANOMALY</span>
+            <div className="text-2xl font-black text-[#ff3b69] mt-1">{highCount} STOCKS</div>
+            <span className="text-xs text-[#ff3b69]/90 font-bold">&gt;3.0x VOL RATIO</span>
+          </div>
+
+          {/* Extreme Anomaly count */}
+          <div className="p-3.5 bg-[#0d0f14] border border-[#1c1f26] rounded flex flex-col justify-between col-span-2 md:col-span-1">
+            <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">EXTREME ANOMALY</span>
+            <div className="text-2xl font-black text-[#c084fc] mt-1">{extremeCount} STOCKS</div>
+            <span className="text-xs text-[#c084fc]/90 font-bold">CRITICAL VOL / BREAK</span>
           </div>
         </div>
 
-        {/* ── SEARCH & FILTER CONTROLS ── */}
-        <div className="p-5 rounded-3xl bg-[#081527] border border-[#152a47] space-y-4 shadow-xl">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-            {/* Search Input */}
-            <div className="relative flex-1 max-w-xl">
-              <form onSubmit={(e) => handleDirectSearch(undefined, e)} className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
-                  <input
-                    id="stock-search"
-                    type="text"
-                    value={searchQuery}
-                    onFocus={() => setShowSuggestions(true)}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setShowSuggestions(true);
-                      if (searchError) setSearchError(null);
-                    }}
-                    placeholder="Type any stock name: e.g. TATA, RELIANCE, INFOSYS..."
-                    className="w-full pl-12 pr-4 py-3 rounded-2xl bg-[#050c17] border-2 border-[#193355] text-white placeholder:text-slate-500 text-sm sm:text-base font-semibold focus:outline-none focus:border-emerald-400 transition"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={analyzingTicker || !searchQuery.trim()}
-                  className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm transition shadow-lg shadow-emerald-600/30 flex items-center gap-2 shrink-0 disabled:opacity-40"
-                >
-                  {analyzingTicker ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  <span>Test Safety</span>
-                </button>
-              </form>
-
-              {/* Suggestions */}
-              {showSuggestions && suggestions.length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-2xl bg-[#071221] border border-[#1b365a] shadow-2xl overflow-hidden">
-                  <div className="p-1 max-h-60 overflow-y-auto divide-y divide-[#13253e]">
-                    {suggestions.map((item) => (
-                      <button
-                        key={item.ticker}
-                        type="button"
-                        onClick={() => handleDirectSearch(item.ticker)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-[#0c1f38] transition flex items-center justify-between"
-                      >
-                        <span className="font-bold text-white text-sm">{item.ticker}</span>
-                        <span className="text-xs text-slate-400 truncate max-w-[220px]">{item.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Quick Universe Selector */}
-            <div className="flex items-center gap-2 bg-[#050c17] p-1.5 rounded-2xl border border-[#193355] self-start md:self-auto">
-              <span className="text-xs font-bold text-slate-400 pl-2">Market List:</span>
+        {/* Command Search & Fast Filter Toolbar */}
+        <div className="p-3 bg-[#0d0f14] border border-[#1c1f26] rounded flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-sm">
+          {/* Terminal Search */}
+          <div className="relative flex-1 max-w-xl">
+            <form onSubmit={(e) => handleDirectSearch(undefined, e)} className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-base">&gt;</span>
+                <input
+                  id="terminal-search"
+                  type="text"
+                  value={searchQuery}
+                  onFocus={() => setShowSuggestions(true)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowSuggestions(true);
+                    if (searchError) setSearchError(null);
+                  }}
+                  placeholder="QUERY TICKER (e.g. RELIANCE, TCS, ZOMATO)..."
+                  className="w-full pl-9 pr-3 py-2 bg-[#050608] border border-[#252833] text-white placeholder:text-slate-500 text-sm font-mono uppercase focus:outline-none focus:border-[#00f5a0]"
+                />
+              </div>
               <button
-                type="button"
+                type="submit"
+                disabled={analyzingTicker || !searchQuery.trim()}
+                className="px-4 py-2 bg-[#162a22] hover:bg-[#1f3f33] text-[#00f5a0] border border-[#00f5a0]/40 font-black uppercase text-xs sm:text-sm transition disabled:opacity-40"
+              >
+                {analyzingTicker ? "SCANNING..." : "EXEC_INSPECT"}
+              </button>
+            </form>
+
+            {/* Autocomplete Dropdown */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#0d0f14] border border-[#2d313d] shadow-2xl">
+                {suggestions.map((item) => (
+                  <button
+                    key={item.ticker}
+                    type="button"
+                    onClick={() => handleDirectSearch(item.ticker)}
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-[#181b22] text-sm flex items-center justify-between border-b border-[#161820]"
+                  >
+                    <span className="font-bold text-[#00f5a0]">{item.ticker}</span>
+                    <span className="text-slate-300 text-xs truncate max-w-[200px]">{item.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Quick Universe Selector & Risk Filters */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center border border-[#1f222b] bg-[#050608] rounded p-0.5">
+              <button
                 onClick={() => {
                   setUniverse("nifty50");
                   fetchData("nifty50");
                 }}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all ${
-                  universe === "nifty50"
-                    ? "bg-[#102744] text-emerald-300 border border-emerald-500/40 shadow-sm"
-                    : "text-slate-400 hover:text-white"
+                className={`px-3 py-1.5 text-xs sm:text-sm font-bold ${
+                  universe === "nifty50" ? "bg-[#161922] text-[#00f5a0] border border-[#2e3442]" : "text-slate-400 hover:text-white"
                 }`}
               >
-                Top 50 Giants (NIFTY 50)
+                [1] NIFTY 50
               </button>
               <button
-                type="button"
                 onClick={() => {
                   setUniverse("watchlist");
                   fetchData("watchlist");
                 }}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all ${
-                  universe === "watchlist"
-                    ? "bg-[#102744] text-emerald-300 border border-emerald-500/40 shadow-sm"
-                    : "text-slate-400 hover:text-white"
+                className={`px-3 py-1.5 text-xs sm:text-sm font-bold ${
+                  universe === "watchlist" ? "bg-[#161922] text-[#00f5a0] border border-[#2e3442]" : "text-slate-400 hover:text-white"
                 }`}
               >
-                My Saved Watchlist
+                [2] WATCHLIST
               </button>
             </div>
-          </div>
 
-          {/* Quick Filter Buttons */}
-          <div className="flex items-center gap-2 pt-2 border-t border-[#132742] flex-wrap">
-            <span className="text-xs font-bold text-slate-400">Show Only:</span>
-            {[
-              { id: "ALL", label: "Show Everything" },
-              { id: "SAFE", label: "🟢 Safe Stocks Only" },
-              { id: "ATTENTION", label: "🟡 Moving Fast (Watch)" },
-              { id: "DANGER", label: "🔴 Possible Trap / Dump" },
-            ].map((f) => {
-              const active = riskFilter === f.id;
-              return (
+            {/* Risk Filters */}
+            <div className="flex items-center gap-1.5">
+              {(["ALL", "EXTREME", "HIGH", "MEDIUM", "LOW"] as const).map((r) => (
                 <button
-                  key={f.id}
-                  onClick={() => setRiskFilter(f.id as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                    active
-                      ? "bg-emerald-950 text-emerald-300 border-emerald-500 shadow-sm"
-                      : "bg-[#060e1b] text-slate-400 border-[#142944] hover:text-white hover:border-[#1e3d66]"
+                  key={r}
+                  onClick={() => setRiskFilter(r)}
+                  className={`px-2.5 py-1.5 text-xs font-bold uppercase border ${
+                    riskFilter === r
+                      ? "bg-[#1a2332] text-[#00d2ff] border-[#00d2ff]/50"
+                      : "bg-[#050608] text-slate-400 border-[#1f222b] hover:text-white"
                   }`}
                 >
-                  {f.label}
+                  {r}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* ── STOCK LIST TABLE ── */}
-        <div className="rounded-3xl border border-[#152a47] bg-[#071324] shadow-2xl overflow-hidden">
-          <div className="p-5 border-b border-[#142844] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-black text-white">Stock Inspection List</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Click any row below to open deep analysis and safety report</p>
+        {/* ── HIGH-DENSITY TERMINAL DATA TABLE ── */}
+        <div className="border border-[#1c1f26] bg-[#090a0d] overflow-hidden">
+          <div className="px-4 py-2.5 bg-[#0d0f14] border-b border-[#1c1f26] flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2 font-bold text-slate-200">
+              <SlidersHorizontal className="w-4 h-4 text-[#00f5a0]" />
+              <span>LIVE SECURITIES SURVEILLANCE MATRIX</span>
             </div>
-            <span className="text-xs font-mono px-3 py-1 rounded-full bg-[#0a1829] text-slate-300 border border-[#193355]">
-              Showing {filteredStocks.length} Stocks
+            <span className="text-xs text-slate-400 font-bold">
+              DISPLAYING {filteredStocks.length} OF {stocks.length} RECORDS
             </span>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className="border-b border-[#142844] bg-[#050e1c] text-xs font-black uppercase tracking-wider text-slate-400">
-                  <th className="py-4 px-6">Company / Stock</th>
-                  <th className="py-4 px-6">Price</th>
-                  <th className="py-4 px-6">Today's Move</th>
-                  <th className="py-4 px-6">Trading Volume</th>
-                  <th className="py-4 px-6">Danger Meter (0-100)</th>
-                  <th className="py-4 px-6 text-right">What Should You Do?</th>
+                <tr className="border-b border-[#1c1f26] bg-[#0d0f14] text-xs uppercase tracking-wider text-slate-300 font-black">
+                  <th className="py-3 px-4">TICKER</th>
+                  <th className="py-3 px-4 text-right">LTP (₹)</th>
+                  <th className="py-3 px-4 text-right">1D CHG</th>
+                  <th className="py-3 px-4 text-right">VOL RATIO</th>
+                  <th className="py-3 px-4 text-right">Z-SCORE</th>
+                  <th className="py-3 px-4 text-right">RSI (14)</th>
+                  <th className="py-3 px-4 text-right">ANOMALY SCORE</th>
+                  <th className="py-3 px-4 text-center">SURVEILLANCE STATUS</th>
+                  <th className="py-3 px-4 text-right">ACTION</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#10223a]">
+              <tbody className="divide-y divide-[#13151c]">
                 {loading && stocks.length === 0 ? (
-                  Array.from({ length: 6 }).map((_, i) => (
+                  Array.from({ length: 10 }).map((_, i) => (
                     <tr key={i} className="animate-pulse">
-                      <td colSpan={6} className="py-5 px-6">
-                        <div className="h-6 bg-[#0c1a2e] rounded-xl w-full" />
+                      <td colSpan={9} className="py-4 px-4">
+                        <div className="h-5 bg-[#141720] rounded w-full" />
                       </td>
                     </tr>
                   ))
                 ) : filteredStocks.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-16 text-center text-slate-400">
-                      <p className="text-base font-bold">No stocks match your filter.</p>
-                      <button
-                        onClick={() => {
-                          setRiskFilter("ALL");
-                          setSearchQuery("");
-                        }}
-                        className="mt-3 px-4 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold"
-                      >
-                        Reset Filter
-                      </button>
+                    <td colSpan={9} className="py-12 text-center text-slate-400 text-sm">
+                      NO RECORDS MATCH CRITERIA. HIT &apos;ALL&apos; TO RESET.
                     </td>
                   </tr>
                 ) : (
                   filteredStocks.map((stock) => {
-                    const status = getSimpleStatus(stock.risk_level);
-                    const StatusIcon = status.icon;
+                    const isExtreme = stock.risk_level === "EXTREME";
+                    const isHigh = stock.risk_level === "HIGH";
+                    const isMed = stock.risk_level === "MEDIUM";
+
+                    const rowBg = isExtreme
+                      ? "bg-[#200c14]/30 hover:bg-[#200c14]/50"
+                      : isHigh
+                      ? "bg-[#1c0d10]/20 hover:bg-[#1c0d10]/40"
+                      : "hover:bg-[#11131a]";
+
+                    const statusBadge = isExtreme ? (
+                      <span className="px-2.5 py-1 rounded bg-[#4c0519] text-[#ff3b69] border border-[#ff3b69]/40 font-black text-xs animate-pulse">
+                        ● CRITICAL_PUMP
+                      </span>
+                    ) : isHigh ? (
+                      <span className="px-2.5 py-1 rounded bg-[#330810] text-[#ff6b8b] border border-[#ff6b8b]/40 font-black text-xs">
+                        ▲ VOL_SPIKE
+                      </span>
+                    ) : isMed ? (
+                      <span className="px-2.5 py-1 rounded bg-[#2e1d05] text-amber-400 border border-amber-500/40 font-bold text-xs">
+                        ■ MOMENTUM
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded bg-[#072418] text-[#00f5a0] border border-[#00f5a0]/40 font-bold text-xs">
+                        ✔ CLEAN_FLOW
+                      </span>
+                    );
 
                     return (
                       <tr
                         key={stock.ticker}
                         onClick={() => setSelectedStock(stock)}
-                        className="hover:bg-[#0c1e36] transition-colors cursor-pointer group"
+                        className={`cursor-pointer transition-colors ${rowBg}`}
                       >
-                        {/* Company / Stock */}
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-3">
-                            <span className={`w-3 h-3 rounded-full shrink-0 ${status.traffic}`} />
-                            <div>
-                              <p className="font-black text-white text-base group-hover:text-emerald-300 transition-colors">
-                                {stock.ticker}
-                              </p>
-                              <span className="text-[11px] font-mono text-slate-400">{stock.exchange}</span>
-                            </div>
+                        {/* Ticker */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2 font-bold text-white text-base">
+                            <span className="text-[#00d2ff]">{stock.ticker}</span>
+                            <span className="text-xs text-slate-400 font-normal">{stock.exchange}</span>
                           </div>
                         </td>
 
                         {/* Price */}
-                        <td className="py-4 px-6 font-mono font-bold text-base text-white">
-                          ₹{stock.price.toLocaleString("en-IN")}
+                        <td className="py-3 px-4 text-right font-black text-white text-base">
+                          ₹{stock.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </td>
 
-                        {/* Today's Move */}
-                        <td className="py-4 px-6 font-mono">
-                          <span
-                            className={`inline-flex items-center gap-1 font-black text-sm px-2.5 py-0.5 rounded-lg border ${
-                              stock.price_change_percent >= 0
-                                ? "bg-emerald-950/70 text-emerald-300 border-emerald-500/30"
-                                : "bg-rose-950/70 text-rose-300 border-rose-500/30"
-                            }`}
-                          >
+                        {/* 1D Change */}
+                        <td className="py-3 px-4 text-right">
+                          <span className={`font-black text-sm ${stock.price_change_percent >= 0 ? "text-[#00f5a0]" : "text-[#ff3b69]"}`}>
                             {stock.price_change_percent >= 0 ? "+" : ""}
                             {stock.price_change_percent.toFixed(2)}%
                           </span>
                         </td>
 
-                        {/* Volume */}
-                        <td className="py-4 px-6 font-mono text-slate-300 text-sm">
-                          {(stock.volume / 100000).toFixed(1)} Lakh Shares
+                        {/* Vol Ratio */}
+                        <td className="py-3 px-4 text-right font-mono text-slate-200 text-sm font-semibold">
+                          {stock.volume_ratio ? `${stock.volume_ratio.toFixed(2)}x` : "-"}
                         </td>
 
-                        {/* Danger Meter Bar */}
-                        <td className="py-4 px-6">
-                          <div className="w-36 space-y-1">
-                            <div className="flex justify-between text-xs font-bold font-mono">
-                              <span className="text-slate-400">Score</span>
-                              <span className={stock.risk_score > 55 ? "text-rose-400" : stock.risk_score > 35 ? "text-amber-400" : "text-emerald-400"}>
-                                {stock.risk_score}/100
-                              </span>
-                            </div>
-                            <div className="h-2 rounded-full bg-[#0a1829] overflow-hidden border border-[#193355]">
+                        {/* Z-score */}
+                        <td className="py-3 px-4 text-right font-mono text-sm">
+                          <span className={stock.volume_zscore && stock.volume_zscore > 3 ? "text-[#ff3b69] font-black" : "text-slate-300"}>
+                            {stock.volume_zscore ? stock.volume_zscore.toFixed(1) : "-"}
+                          </span>
+                        </td>
+
+                        {/* RSI */}
+                        <td className="py-3 px-4 text-right font-mono text-sm">
+                          <span className={stock.rsi && stock.rsi > 70 ? "text-amber-400 font-black" : "text-slate-300"}>
+                            {stock.rsi ? stock.rsi.toFixed(1) : "-"}
+                          </span>
+                        </td>
+
+                        {/* Anomaly Score Bar */}
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2.5">
+                            <span className={`font-black text-base ${isExtreme ? "text-[#c084fc]" : isHigh ? "text-[#ff3b69]" : isMed ? "text-amber-400" : "text-[#00f5a0]"}`}>
+                              {stock.risk_score}
+                            </span>
+                            <div className="w-20 h-2 bg-[#161820] overflow-hidden rounded">
                               <div
-                                className={`h-full rounded-full transition-all duration-500 ${
-                                  stock.risk_score > 55 ? "bg-rose-500" : stock.risk_score > 35 ? "bg-amber-400" : "bg-emerald-400"
-                                }`}
+                                className={`h-full ${isExtreme ? "bg-[#c084fc]" : isHigh ? "bg-[#ff3b69]" : isMed ? "bg-amber-400" : "bg-[#00f5a0]"}`}
                                 style={{ width: `${Math.min(100, Math.max(5, stock.risk_score))}%` }}
                               />
                             </div>
                           </div>
                         </td>
 
-                        {/* Advice Badge */}
-                        <td className="py-4 px-6 text-right">
-                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black border uppercase font-mono ${status.badge}`}>
-                            <StatusIcon className="w-3.5 h-3.5" />
-                            <span>{status.label}</span>
+                        {/* Surveillance Status */}
+                        <td className="py-3 px-4 text-center">
+                          {statusBadge}
+                        </td>
+
+                        {/* Action link */}
+                        <td className="py-3 px-4 text-right">
+                          <span className="text-xs text-[#00d2ff] hover:underline font-black">
+                            INSPECT &rarr;
                           </span>
                         </td>
                       </tr>
@@ -629,13 +560,14 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
+
+          {/* Table Footer Stats */}
+          <div className="px-4 py-2.5 bg-[#0c0d12] border-t border-[#1c1f26] flex items-center justify-between text-xs text-slate-400 font-semibold">
+            <span>DATA SOURCE: NSE LIVE REAL-TIME TELEMETRY FEED</span>
+            <span>PRESS TICKET ROW OR HIT &apos;/&apos; FOR DEEP METRICS INSPECTOR</span>
+          </div>
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-[#132742] py-6 text-center text-xs text-slate-500 font-mono">
-        Stock Guardian © {new Date().getFullYear()} — Traffic Light Surveillance For Retail Investors — NSE India
-      </footer>
 
       {/* Watchlist Modal */}
       <WatchlistModal

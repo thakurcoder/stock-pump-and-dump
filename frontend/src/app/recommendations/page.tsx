@@ -14,7 +14,11 @@ import {
   Target,
   BarChart2,
   RefreshCw,
-  Compass
+  Terminal,
+  Cpu,
+  Layers,
+  ArrowUpRight,
+  ArrowDownRight
 } from "lucide-react";
 
 interface NoTradeRule {
@@ -100,7 +104,6 @@ interface OptionRecommendation {
   strategy?: string;
   risk_profile?: string;
   expiry?: string;
-  // legacy/fallback fields
   symbol?: string;
   entry_price_range?: string;
   target?: number;
@@ -139,12 +142,12 @@ export default function RecommendationsPage() {
 
   // Auto-refresh states
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
-  const [refreshInterval, setRefreshInterval] = useState<number>(60); // seconds (default 60s)
+  const [refreshInterval, setRefreshInterval] = useState<number>(60);
   const [secondsLeft, setSecondsLeft] = useState<number>(60);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string>("");
 
   // Option chain strike filter view
-  const [chainStrikeFilter, setChainStrikeFilter] = useState<"all" | "near" | "active">("near");
+  const [chainStrikeFilter, setChainStrikeFilter] = useState<"all" | "near">("near");
   const [showFullChain, setShowFullChain] = useState<boolean>(true);
 
   const fetchRecommendations = async (isBackground: boolean = false) => {
@@ -159,7 +162,7 @@ export default function RecommendationsPage() {
       setOptions(data.options_recommendations || []);
       setStocks(data.stocks_recommendations || []);
       setDisclaimer(data.disclaimer || "");
-      setLastRefreshedAt(new Date());
+      setLastRefreshedAt(new Date().toLocaleTimeString("en-IN", { hour12: false }));
       setSecondsLeft(refreshInterval);
     } catch (err: any) {
       if (!isBackground) {
@@ -171,15 +174,12 @@ export default function RecommendationsPage() {
     }
   };
 
-  // Initial fetch
   useEffect(() => {
     fetchRecommendations(false);
   }, []);
 
-  // Interval timer for auto-refresh countdown
   useEffect(() => {
     if (!autoRefresh) return;
-
     const timer = setInterval(() => {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
@@ -189,335 +189,339 @@ export default function RecommendationsPage() {
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(timer);
   }, [autoRefresh, refreshInterval]);
 
-  // Reset countdown whenever user changes refreshInterval
   const handleIntervalChange = (newInterval: number) => {
     setRefreshInterval(newInterval);
     setSecondsLeft(newInterval);
   };
 
   return (
-    <div className="min-h-screen bg-[#050b14] text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30">
-      {/* Top Navbar */}
-      <header className="border-b border-[#142338] bg-[#081220]/95 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-2xl bg-[#0c1a2e] border border-[#1e3a5f] flex items-center justify-center shadow-md">
-            <Compass className="w-6 h-6 text-emerald-400" />
+    <div className="min-h-screen bg-[#070709] text-slate-100 flex flex-col font-mono selection:bg-[#00f5a0]/30 antialiased">
+      {/* Top Bloomberg Ribbon */}
+      <div className="bg-[#0c0d12] border-b border-[#1c1f26] text-xs sm:text-sm px-5 py-2 flex items-center justify-between overflow-x-auto whitespace-nowrap">
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-2 text-[#00f5a0] font-black">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#00f5a0] animate-pulse"></span>
+            <span>FEED:LIVE (NSE DERIVATIVES DESK)</span>
+          </div>
+          {niftyStrategy && (
+            <>
+              <div className="flex items-center space-x-2">
+                <span className="text-slate-400 font-semibold">NIFTY SPOT:</span>
+                <span className="text-white font-black text-sm">{niftyStrategy.spot_price.toLocaleString("en-IN")}</span>
+                <span className={`text-xs font-black ${niftyStrategy.spot_change_pct >= 0 ? "text-[#00f5a0]" : "text-[#ff3b69]"}`}>
+                  {niftyStrategy.spot_change_pct >= 0 ? "+" : ""}{niftyStrategy.spot_change_pct.toFixed(2)}%
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-slate-400 font-semibold">INDIA VIX:</span>
+                <span className="text-[#fbbf24] font-black text-sm">{niftyStrategy.india_vix} ({niftyStrategy.vix_direction})</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-slate-400 font-semibold">MAX PAIN:</span>
+                <span className="text-[#c084fc] font-black text-sm">{niftyStrategy.max_pain_strike}</span>
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex items-center space-x-4 text-slate-300 text-xs">
+          <span>LAST SYNC: <strong className="text-white">{lastRefreshedAt || "--:--:--"}</strong></span>
+          <span className="text-[#1c1f26]">|</span>
+          <span className="text-[#00d2ff] font-bold">DESK 02 // F&amp;O STRATEGY</span>
+        </div>
+      </div>
+
+      {/* Terminal Main Header */}
+      <header className="border-b border-[#1c1f26] bg-[#0c0d12]/95 sticky top-0 z-50 px-5 py-3.5 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center space-x-3.5">
+          <div className="w-9 h-9 rounded border border-[#252833] bg-[#12141c] flex items-center justify-center text-[#00f5a0]">
+            <Terminal className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-              NIFTY 50 Options &amp; Ideas
-            </h1>
-            <p className="text-xs text-slate-400 font-semibold">Institutional Open Interest (OI) Strategy Guide</p>
+            <div className="flex items-center space-x-2.5">
+              <h1 className="text-base sm:text-lg font-black tracking-wider text-white uppercase">
+                INSTITUTIONAL F&amp;O PLAYBOOK &amp; MATRIX
+              </h1>
+              <span className="text-xs px-2 py-0.5 rounded bg-[#00f5a0]/10 text-[#00f5a0] border border-[#00f5a0]/30 font-bold">
+                PRO-DESK
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">REAL-TIME OI ENGINE &bull; TRAPPED WRITER PANIC DETECTION &bull; GAMMA MATRIX</p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Auto-refresh control group */}
-          <div className="flex items-center space-x-2 bg-[#0c1a2e] border border-[#1e3a5f] px-3 py-1.5 rounded-xl text-xs">
-            {/* Toggle Switch */}
-            <label className="relative inline-flex items-center cursor-pointer">
+        {/* Action Controls */}
+        <div className="flex items-center space-x-2.5 text-xs sm:text-sm">
+          <div className="flex items-center space-x-2 bg-[#12141c] border border-[#252833] px-3 py-1.5 rounded">
+            <label className="flex items-center cursor-pointer space-x-2">
               <input
                 type="checkbox"
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="sr-only peer"
+                className="w-4 h-4 accent-[#00f5a0] bg-[#070709] border-[#252833] rounded"
               />
-              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
-              <span className="ml-2 font-bold text-slate-200 select-none">
-                Auto-Refresh
-              </span>
+              <span className="text-slate-200 font-bold text-xs sm:text-sm">AUTO-PULL</span>
             </label>
 
-            {/* Interval Selector */}
             <select
               value={refreshInterval}
               disabled={!autoRefresh}
               onChange={(e) => handleIntervalChange(Number(e.target.value))}
               aria-label="Refresh Interval"
-              className={`bg-[#050c17] border border-[#1e3a5f] rounded-lg px-2 py-0.5 text-xs font-mono text-emerald-300 focus:outline-none focus:border-emerald-500 transition ${
-                !autoRefresh ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-              }`}
+              className="bg-[#070709] border border-[#252833] rounded px-2 py-1 text-xs sm:text-sm text-[#00f5a0] font-bold focus:outline-none"
             >
-              <option value={15}>15s (Fast)</option>
-              <option value={30}>30s (Active)</option>
-              <option value={60}>1m (Normal)</option>
-              <option value={180}>3m (NSE Snapshot)</option>
-              <option value={300}>5m (Safe)</option>
+              <option value={15}>15s (RAPID)</option>
+              <option value={30}>30s (ACTIVE)</option>
+              <option value={60}>60s (NORMAL)</option>
+              <option value={180}>180s (BATCH)</option>
             </select>
 
-            {/* Countdown Badge */}
             {autoRefresh && (
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-[#092218] text-emerald-400 border border-emerald-500/40 shrink-0">
+              <span className="text-xs font-bold px-2 py-0.5 rounded bg-[#00f5a0]/15 text-[#00f5a0] border border-[#00f5a0]/30">
                 {secondsLeft}s
               </span>
             )}
           </div>
 
-          {/* Manual Refresh Button */}
           <button
             onClick={() => fetchRecommendations(false)}
-            className="flex items-center space-x-1.5 text-xs font-bold px-3.5 py-2 rounded-xl border border-[#1e3a5f] bg-[#0c1a2e] hover:bg-[#122846] text-slate-200 transition"
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#12141c] hover:bg-[#1a1d28] border border-[#252833] text-slate-200 rounded font-bold text-xs sm:text-sm transition"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-emerald-400" : ""}`} />
-            <span>Refresh</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-[#00f5a0]" : ""}`} />
+            <span>PULL [R]</span>
           </button>
 
           <Link
             href="/"
-            className="text-xs font-bold px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md shadow-emerald-600/20"
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#00f5a0]/15 hover:bg-[#00f5a0]/25 text-[#00f5a0] border border-[#00f5a0]/30 rounded font-bold text-xs sm:text-sm transition"
           >
-            &larr; Back to Stock Guardian
+            <span>&larr; SURVEILLANCE DESK</span>
           </Link>
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-7">
-        {/* Banner with Deep Blue & Controlled Green */}
-        <div className="p-5 rounded-3xl border border-[#162d4c] bg-gradient-to-r from-[#091526] to-[#07111f] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
-          <div className="flex items-center space-x-3.5">
-            <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-              <Compass className="w-6 h-6 shrink-0" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-white">
-                Live NIFTY 50 Option Strategy Matrix Active
-              </h2>
-              <p className="text-xs text-slate-300 mt-0.5">
-                Evaluates Live Spot, Trapped Writer Unwinding, Strike Width Range, and Volatility Regime.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-[#0c1a2e] text-emerald-400 border border-emerald-500/30">
-              NIFTY Spot: {niftyStrategy ? niftyStrategy.spot_price?.toLocaleString("en-IN") : "..."}
-            </span>
-            <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-[#0c1a2e] text-amber-300 border border-amber-500/30">
-              INDIA VIX: {niftyStrategy ? `${niftyStrategy.india_vix} (${niftyStrategy.vix_direction})` : "..."}
-            </span>
-          </div>
-        </div>
-
+      <main className="flex-1 w-full p-4 space-y-4 max-w-[1600px] mx-auto">
         {loading ? (
-          <div className="py-24 flex flex-col items-center justify-center space-y-4">
-            <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin" />
-            <p className="text-sm text-slate-400 animate-pulse">
-              Parsing live NIFTY 50 Option Chain, Strike Distributions & VIX Regimes...
+          <div className="py-24 flex flex-col items-center justify-center space-y-3 bg-[#0c0d12] border border-[#1c1f26] rounded">
+            <RefreshCw className="w-7 h-7 text-[#00d2ff] animate-spin" />
+            <p className="text-xs text-slate-400 font-mono tracking-wider">
+              FETCHING LIVE DERIVATIVES CONTRACTS &amp; PARSING STRIKE DISTRIBUTIONS...
             </p>
           </div>
         ) : error ? (
-          <div className="p-6 rounded-xl border border-rose-500/30 bg-rose-950/20 text-rose-300 space-y-2">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle className="w-5 h-5 text-rose-400" />
-              <h3 className="text-sm font-semibold">Error Loading Strategy Feed</h3>
+          <div className="p-4 rounded border border-[#ff3b69]/40 bg-[#ff3b69]/10 text-[#ff3b69] space-y-1">
+            <div className="flex items-center space-x-2 text-xs font-bold">
+              <AlertTriangle className="w-4 h-4" />
+              <span>TERMINAL TELEMETRY INTERRUPTED</span>
             </div>
-            <p className="text-xs text-rose-300/80">{error}</p>
+            <p className="text-[11px] text-slate-300">{error}</p>
           </div>
         ) : (
           <>
             {/* SECTION 1: NIFTY 50 INSTITUTIONAL OPTIONS STRATEGY */}
             {niftyStrategy && (
-              <section className="space-y-6">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div className="flex items-center space-x-2">
-                    <BarChart2 className="w-5 h-5 text-cyan-400" />
-                    <h2 className="text-lg font-bold text-white tracking-wide">
-                      NIFTY 50 Option Chain Strategy Matrix
-                    </h2>
-                  </div>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-950/60 border border-cyan-800 text-cyan-300 font-mono">
-                    NSE Live Rules Active
-                  </span>
-                </div>
-
-                {/* STEP 1: PRE-TRADE SETUP (OI Battleground) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-4">
+                {/* PRE-TRADE SETUP: INTRADAY VS POSITIONAL BATTLEGROUND */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {/* Intraday Battleground */}
-                  <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                        1. Intraday Battleground (Change in OI)
-                      </h3>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                        Fast Dynamics
+                  <div className="p-3.5 rounded border border-[#1c1f26] bg-[#0c0d12] space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#1c1f26] pb-2">
+                      <div className="flex items-center space-x-2">
+                        <Activity className="w-3.5 h-3.5 text-[#00d2ff]" />
+                        <span className="text-xs font-bold text-white tracking-wider">
+                          1. INTRADAY BATTLEGROUND (CHANGE IN OI)
+                        </span>
+                      </div>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#161820] text-[#00d2ff] border border-[#252833]">
+                        HIGH VELOCITY
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-1">
-                      <div className="p-3 rounded-lg border border-emerald-500/20 bg-emerald-950/10">
-                        <span className="text-[11px] text-emerald-400 font-medium">Intraday Support (Max PE Chg)</span>
-                        <div className="text-xl font-bold font-mono text-emerald-300 mt-1">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded border border-[#00f5a0]/25 bg-[#00f5a0]/5">
+                        <span className="text-[10px] text-[#00f5a0] block font-bold tracking-wider">
+                          SUPPORT [MAX PE WRITING]
+                        </span>
+                        <div className="text-xl font-black text-white mt-1">
                           {niftyStrategy.pre_trade_setup?.intraday?.support_strike} PE
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          +{((niftyStrategy.pre_trade_setup?.intraday?.support_chg_oi || 0) / 100000).toFixed(2)}L OI Added
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          +{((niftyStrategy.pre_trade_setup?.intraday?.support_chg_oi || 0) / 100000).toFixed(2)}L OI ADDED
                         </div>
                       </div>
 
-                      <div className="p-3 rounded-lg border border-rose-500/20 bg-rose-950/10">
-                        <span className="text-[11px] text-rose-400 font-medium">Intraday Resistance (Max CE Chg)</span>
-                        <div className="text-xl font-bold font-mono text-rose-300 mt-1">
+                      <div className="p-3 rounded border border-[#ff3b69]/25 bg-[#ff3b69]/5">
+                        <span className="text-[10px] text-[#ff3b69] block font-bold tracking-wider">
+                          RESISTANCE [MAX CE WRITING]
+                        </span>
+                        <div className="text-xl font-black text-white mt-1">
                           {niftyStrategy.pre_trade_setup?.intraday?.resistance_strike} CE
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          +{((niftyStrategy.pre_trade_setup?.intraday?.resistance_chg_oi || 0) / 100000).toFixed(2)}L OI Added
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          +{((niftyStrategy.pre_trade_setup?.intraday?.resistance_chg_oi || 0) / 100000).toFixed(2)}L OI ADDED
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Positional Battleground */}
-                  <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                        Positional & Swing Trend (Total OI)
-                      </h3>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                        Monthly Trend
+                  <div className="p-3.5 rounded border border-[#1c1f26] bg-[#0c0d12] space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#1c1f26] pb-2">
+                      <div className="flex items-center space-x-2">
+                        <Layers className="w-3.5 h-3.5 text-[#fbbf24]" />
+                        <span className="text-xs font-bold text-white tracking-wider">
+                          POSITIONAL &amp; EXPIRY TREND (TOTAL OI CUMULATIVE)
+                        </span>
+                      </div>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#161820] text-[#fbbf24] border border-[#252833]">
+                        EXPIRY ANCHOR
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-1">
-                      <div className="p-3 rounded-lg border border-emerald-500/20 bg-emerald-950/10">
-                        <span className="text-[11px] text-emerald-400 font-medium">Positional Support (Max PE OI)</span>
-                        <div className="text-xl font-bold font-mono text-emerald-300 mt-1">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded border border-[#00f5a0]/25 bg-[#00f5a0]/5">
+                        <span className="text-[10px] text-[#00f5a0] block font-bold tracking-wider">
+                          POSITIONAL WALL [MAX PE]
+                        </span>
+                        <div className="text-xl font-black text-white mt-1">
                           {niftyStrategy.pre_trade_setup?.positional?.support_strike} PE
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {((niftyStrategy.pre_trade_setup?.positional?.support_total_oi || 0) / 100000).toFixed(2)}L Total OI
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          {((niftyStrategy.pre_trade_setup?.positional?.support_total_oi || 0) / 100000).toFixed(2)}L TOTAL OI
                         </div>
                       </div>
 
-                      <div className="p-3 rounded-lg border border-rose-500/20 bg-rose-950/10">
-                        <span className="text-[11px] text-rose-400 font-medium">Positional Resistance (Max CE OI)</span>
-                        <div className="text-xl font-bold font-mono text-rose-300 mt-1">
+                      <div className="p-3 rounded border border-[#ff3b69]/25 bg-[#ff3b69]/5">
+                        <span className="text-[10px] text-[#ff3b69] block font-bold tracking-wider">
+                          POSITIONAL CAP [MAX CE]
+                        </span>
+                        <div className="text-xl font-black text-white mt-1">
                           {niftyStrategy.pre_trade_setup?.positional?.resistance_strike} CE
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {((niftyStrategy.pre_trade_setup?.positional?.resistance_total_oi || 0) / 100000).toFixed(2)}L Total OI
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          {((niftyStrategy.pre_trade_setup?.positional?.resistance_total_oi || 0) / 100000).toFixed(2)}L TOTAL OI
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* STEP 2: CORE ENTRY CHECKS & EXECUTION */}
-                <div className="p-6 rounded-xl border border-slate-800 bg-gradient-to-b from-slate-900/80 to-slate-950 space-y-6">
+                {/* STRATEGY EXECUTION ENGINE */}
+                <div className="p-4 rounded border border-[#1c1f26] bg-[#0c0d12] space-y-4">
                   {/* Step A Panic alert if active */}
                   {niftyStrategy.panic_unwinding_override && (
-                    <div className="p-4 rounded-xl border border-amber-500/40 bg-amber-950/30 flex items-start space-x-3 text-amber-200">
-                      <Zap className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="p-3 rounded border border-[#fbbf24]/50 bg-[#fbbf24]/10 flex items-start space-x-3 text-[#fbbf24]">
+                      <Zap className="w-4 h-4 shrink-0 mt-0.5" />
                       <div>
-                        <h4 className="text-sm font-bold text-amber-300">
-                          Step A: Panic Unwinding Override Active ({niftyStrategy.panic_unwinding_override.type})
-                        </h4>
-                        <p className="text-xs text-amber-200/90 mt-1 leading-relaxed">
+                        <div className="text-xs font-black uppercase">
+                          STEP A OVERRIDE: TRAPPED WRITER PANIC UNWINDING ({niftyStrategy.panic_unwinding_override.type})
+                        </div>
+                        <p className="text-[11px] text-slate-300 mt-1">
                           {niftyStrategy.panic_unwinding_override.detail}
                         </p>
-                        <span className="inline-block mt-2 font-mono text-xs font-semibold px-2.5 py-1 rounded bg-amber-900/60 border border-amber-700 text-amber-100">
-                          Action: {niftyStrategy.panic_unwinding_override.action}
+                        <span className="inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded bg-[#fbbf24]/20 border border-[#fbbf24]/40 text-[#fbbf24]">
+                          ACTION: {niftyStrategy.panic_unwinding_override.action}
                         </span>
                       </div>
                     </div>
                   )}
 
                   {/* Step B: Range Filter */}
-                  <div className="p-4 rounded-lg border border-slate-800 bg-slate-900/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="p-3 rounded border border-[#1c1f26] bg-[#070709] flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                          Step B: Strike Range Filter
+                        <span className="text-xs font-black text-white uppercase">
+                          STEP B: SPREAD WIDTH RANGE FILTER
                         </span>
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                           !niftyStrategy.range_filter?.is_wide_range
-                            ? "bg-emerald-950/80 text-emerald-400 border border-emerald-800"
-                            : "bg-amber-950/80 text-amber-400 border border-amber-800"
+                            ? "bg-[#00f5a0]/15 text-[#00f5a0] border border-[#00f5a0]/30"
+                            : "bg-[#fbbf24]/15 text-[#fbbf24] border border-[#fbbf24]/30"
                         }`}>
                           {niftyStrategy.range_filter?.range_verdict}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Distance between MAX CHG IN OI PE and CE. Threshold is approx ~1.65% of spot.
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Distance between highest OI Change PE and CE strikes. Safe bounds threshold ~1.65% of spot.
                       </p>
                     </div>
 
                     <div className="flex items-center space-x-4 shrink-0 text-right">
                       <div>
-                        <div className="text-xs text-slate-400">Spread Distance</div>
-                        <div className="text-sm font-mono font-bold text-slate-200">
-                          {niftyStrategy.range_filter?.strike_distance} pts
+                        <div className="text-[10px] text-slate-500 uppercase">SPREAD DISTANCE</div>
+                        <div className="text-xs font-bold text-slate-200">
+                          {niftyStrategy.range_filter?.strike_distance} PTS
                         </div>
                       </div>
-                      <div className="border-l border-slate-700 pl-4">
-                        <div className="text-xs text-slate-400">Max Threshold</div>
-                        <div className="text-sm font-mono font-bold text-cyan-400">
-                          ≤ {niftyStrategy.range_filter?.threshold_pts} pts
+                      <div className="border-l border-[#1c1f26] pl-4">
+                        <div className="text-[10px] text-slate-500 uppercase">MAX THRESHOLD</div>
+                        <div className="text-xs font-bold text-[#00d2ff]">
+                          &le; {niftyStrategy.range_filter?.threshold_pts} PTS
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Step C: Recommended Strategy Box */}
-                  <div className="p-5 rounded-xl border border-cyan-500/30 bg-cyan-950/10 space-y-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-cyan-800/40 pb-3">
+                  {/* Step C: Recommended Strategy Order Deck */}
+                  <div className="p-4 rounded border border-[#00d2ff]/30 bg-[#00d2ff]/5 space-y-3">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-[#1c1f26] pb-2.5">
                       <div>
-                        <span className="text-[11px] font-semibold tracking-wider text-cyan-400 uppercase">
-                          Step C: Direction + Volatility Strategy
+                        <span className="text-[10px] font-bold tracking-wider text-[#00d2ff] uppercase">
+                          STEP C: DIRECTIONAL &amp; VOLATILITY PLAYBOOK
                         </span>
-                        <h3 className="text-xl font-bold text-white flex items-center space-x-2 mt-0.5">
+                        <h3 className="text-base font-black text-white flex items-center space-x-2 mt-0.5">
                           <span>{niftyStrategy.trade_recommendation?.strategy_name}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded font-mono ${
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
                             niftyStrategy.market_direction === "BULLISH"
-                              ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
-                              : "bg-rose-950 text-rose-400 border border-rose-800"
+                              ? "bg-[#00f5a0]/20 text-[#00f5a0] border border-[#00f5a0]/40"
+                              : "bg-[#ff3b69]/20 text-[#ff3b69] border border-[#ff3b69]/40"
                           }`}>
                             {niftyStrategy.market_direction}
                           </span>
                         </h3>
                       </div>
 
-                      <div className="flex items-center space-x-3 text-xs">
-                        <span className="text-slate-400">INDIAVIX Regime:</span>
-                        <span className="font-semibold text-amber-300 font-mono">
+                      <div className="flex items-center space-x-2 text-xs">
+                        <span className="text-slate-400">INDIA VIX REGIME:</span>
+                        <span className="font-bold text-[#fbbf24]">
                           {niftyStrategy.vix_direction} ({niftyStrategy.india_vix})
                         </span>
                       </div>
                     </div>
 
-                    <p className="text-xs text-slate-300 leading-relaxed">
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
                       {niftyStrategy.trade_recommendation?.rationale}
                     </p>
 
                     {/* Legs execution */}
-                    <div className="space-y-2 pt-2">
-                      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                        Exact Strategy Legs ({niftyStrategy.trade_recommendation?.execution_type})
+                    <div className="space-y-2 pt-1">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        EXECUTABLE LEGS MATRIX ({niftyStrategy.trade_recommendation?.execution_type})
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {niftyStrategy.trade_recommendation?.legs?.map((leg, i) => (
                           <div
                             key={i}
-                            className="p-3 rounded-lg border border-slate-800 bg-slate-900/90 flex items-center justify-between"
+                            className="p-2.5 rounded border border-[#252833] bg-[#070709] flex items-center justify-between"
                           >
-                            <div className="flex items-center space-x-2.5">
+                            <div className="flex items-center space-x-2">
                               <span
-                                className={`text-xs font-bold px-2 py-0.5 rounded ${
+                                className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
                                   leg.toUpperCase().includes("BUY")
-                                    ? "bg-emerald-900/60 text-emerald-300 border border-emerald-700"
-                                    : "bg-rose-900/60 text-rose-300 border border-rose-700"
+                                    ? "bg-[#00f5a0]/20 text-[#00f5a0] border border-[#00f5a0]/40"
+                                    : "bg-[#ff3b69]/20 text-[#ff3b69] border border-[#ff3b69]/40"
                                 }`}
                               >
                                 {leg.split(" ")[0]}
                               </span>
-                              <span className="font-mono font-bold text-white text-sm">
+                              <span className="font-bold text-white text-xs">
                                 {leg.substring(leg.indexOf(" ") + 1)}
                               </span>
                             </div>
-                            <span className="text-xs font-mono text-cyan-400 font-medium">
-                              Active Leg
+                            <span className="text-[10px] text-[#00d2ff] font-bold">
+                              TARGET LEG
                             </span>
                           </div>
                         ))}
@@ -526,41 +530,41 @@ export default function RecommendationsPage() {
 
                     {/* Naked Alternative */}
                     {niftyStrategy.naked_alternative && (
-                      <div className="p-3 rounded-lg border border-indigo-500/20 bg-indigo-950/20 text-xs text-indigo-300 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                      <div className="p-2.5 rounded border border-[#c084fc]/30 bg-[#c084fc]/10 text-xs text-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-1">
                         <div>
-                          <span className="font-semibold text-indigo-200">Single-Leg Alternative:</span>{" "}
-                          {niftyStrategy.naked_alternative.action}
+                          <span className="font-bold text-[#c084fc]">NAKED ALTERNATIVE:</span>{" "}
+                          <span>{niftyStrategy.naked_alternative.action}</span>
                         </div>
-                        <span className="text-[11px] font-mono text-slate-400">
+                        <span className="text-[10px] text-slate-400">
                           {niftyStrategy.naked_alternative.condition}
                         </span>
                       </div>
                     )}
                   </div>
 
-                  {/* STEP 3: STRICT NO-TRADE & EXIT RULES CHECKLIST */}
-                  <div className="space-y-3 pt-2">
+                  {/* STEP 3: STRICT NO-TRADE GATES */}
+                  <div className="space-y-2 pt-1">
                     <div className="flex items-center space-x-2">
-                      <ShieldAlert className="w-4 h-4 text-rose-400" />
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                        3. Strict Institutional No-Trade & Exit Gates
-                      </h4>
+                      <ShieldAlert className="w-3.5 h-3.5 text-[#ff3b69]" />
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">
+                        3. INSTITUTIONAL RISK &amp; NO-TRADE GATES
+                      </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                       {niftyStrategy.no_trade_rules?.map((rule, idx) => (
-                        <div key={idx} className="p-3 rounded-lg border border-slate-800 bg-slate-900/60 space-y-1">
+                        <div key={idx} className="p-2.5 rounded border border-[#1c1f26] bg-[#070709] space-y-1">
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold text-slate-300">{rule.rule}</span>
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                            <span className="font-bold text-slate-200 text-[11px]">{rule.rule}</span>
+                            <span className={`text-[10px] font-black px-1.5 py-0.2 rounded ${
                               rule.triggered
-                                ? "bg-amber-950/80 text-amber-300 border border-amber-800"
-                                : "bg-emerald-950/80 text-emerald-300 border border-emerald-800"
+                                ? "bg-[#ff3b69]/20 text-[#ff3b69] border border-[#ff3b69]/40"
+                                : "bg-[#00f5a0]/15 text-[#00f5a0] border border-[#00f5a0]/30"
                             }`}>
                               {rule.status}
                             </span>
                           </div>
-                          <p className="text-slate-400 text-[11px] leading-relaxed">
+                          <p className="text-slate-400 text-[10px] leading-relaxed">
                             {rule.detail}
                           </p>
                         </div>
@@ -570,84 +574,82 @@ export default function RecommendationsPage() {
 
                   {/* STEP 4: COMPLETE NIFTY 50 LIVE OPTION CHAIN MATRIX */}
                   {niftyStrategy.chain_rows && niftyStrategy.chain_rows.length > 0 && (
-                    <div className="space-y-3 pt-4 border-t border-slate-800">
+                    <div className="space-y-3 pt-3 border-t border-[#1c1f26]">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="flex items-center space-x-2">
-                          <Activity className="w-4 h-4 text-cyan-400" />
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                            4. Complete NIFTY 50 Live Option Chain Table
-                          </h4>
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400">
-                            {niftyStrategy.chain_rows.length} Strikes Loaded
+                          <BarChart2 className="w-3.5 h-3.5 text-[#00d2ff]" />
+                          <span className="text-xs font-bold uppercase tracking-wider text-white">
+                            4. LIVE NIFTY 50 OPTION CHAIN ORDERBOOK MATRIX
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#161820] text-slate-400 border border-[#252833]">
+                            {niftyStrategy.chain_rows.length} STRIKES
                           </span>
                         </div>
 
                         {/* Controls */}
-                        <div className="flex items-center space-x-2">
-                          <div className="flex items-center bg-slate-800/80 rounded-lg p-0.5 text-[11px] font-mono border border-slate-700">
+                        <div className="flex items-center space-x-2 text-[11px]">
+                          <div className="flex items-center bg-[#070709] rounded p-0.5 border border-[#252833]">
                             <button
                               onClick={() => setChainStrikeFilter("near")}
-                              className={`px-2 py-0.5 rounded ${
-                                chainStrikeFilter === "near" ? "bg-cyan-600 text-white font-semibold" : "text-slate-400 hover:text-white"
+                              className={`px-2 py-0.5 rounded font-bold ${
+                                chainStrikeFilter === "near" ? "bg-[#00d2ff]/20 text-[#00d2ff] border border-[#00d2ff]/40" : "text-slate-400 hover:text-white"
                               }`}
                             >
-                              Near ATM (±10)
+                              NEAR ATM (±500)
                             </button>
                             <button
                               onClick={() => setChainStrikeFilter("all")}
-                              className={`px-2 py-0.5 rounded ${
-                                chainStrikeFilter === "all" ? "bg-cyan-600 text-white font-semibold" : "text-slate-400 hover:text-white"
+                              className={`px-2 py-0.5 rounded font-bold ${
+                                chainStrikeFilter === "all" ? "bg-[#00d2ff]/20 text-[#00d2ff] border border-[#00d2ff]/40" : "text-slate-400 hover:text-white"
                               }`}
                             >
-                              Full Chain (All)
+                              FULL CHAIN ({niftyStrategy.chain_rows.length})
                             </button>
                           </div>
 
                           <button
                             onClick={() => setShowFullChain(!showFullChain)}
-                            className="text-[11px] font-medium text-slate-400 hover:text-cyan-300 px-2 py-1 rounded bg-slate-900 border border-slate-800 transition"
+                            className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-[#12141c] border border-[#252833] transition"
                           >
-                            {showFullChain ? "Collapse Table" : "Expand Table"}
+                            {showFullChain ? "COLLAPSE" : "EXPAND"}
                           </button>
                         </div>
                       </div>
 
                       {showFullChain && (
-                        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/80 shadow-2xl">
-                          <table className="w-full text-xs text-left border-collapse font-mono">
+                        <div className="overflow-x-auto rounded border border-[#1c1f26] bg-[#070709]">
+                          <table className="w-full text-xs sm:text-sm text-left border-collapse">
                             <thead>
-                              {/* Header Top Layer */}
-                              <tr className="border-b border-slate-800 text-[11px] font-bold">
-                                <th colSpan={5} className="py-2.5 px-3 text-center bg-cyan-950/40 text-cyan-300 border-r border-slate-800">
-                                  CALLS (CE)
+                              <tr className="border-b border-[#1c1f26] text-xs font-black uppercase">
+                                <th colSpan={5} className="py-2.5 px-3 text-center bg-[#0c1a24] text-[#00d2ff] border-r border-[#1c1f26]">
+                                  CALLS (CE) — BULLISH WRITERS
                                 </th>
-                                <th className="py-2.5 px-3 text-center bg-slate-900 text-amber-300 border-r border-slate-800">
+                                <th className="py-2.5 px-3 text-center bg-[#161820] text-[#fbbf24] border-r border-[#1c1f26]">
                                   STRIKE
                                 </th>
-                                <th colSpan={5} className="py-2.5 px-3 text-center bg-indigo-950/40 text-indigo-300">
-                                  PUTS (PE)
+                                <th colSpan={5} className="py-2.5 px-3 text-center bg-[#141224] text-[#c084fc]">
+                                  PUTS (PE) — BEARISH WRITERS
                                 </th>
                               </tr>
-                              {/* Column Names */}
-                              <tr className="border-b border-slate-800 text-[10px] text-slate-400 bg-slate-900/90 font-semibold tracking-wider">
-                                <th className="py-2 px-2.5 text-right">OI</th>
-                                <th className="py-2 px-2.5 text-right">CHG IN OI</th>
-                                <th className="py-2 px-2.5 text-right">VOLUME</th>
-                                <th className="py-2 px-2 text-right">IV%</th>
-                                <th className="py-2 px-3 text-right text-cyan-300 border-r border-slate-800">LTP (₹)</th>
+                              <tr className="border-b border-[#1c1f26] text-xs text-slate-300 bg-[#0c0d12] font-black uppercase tracking-wider">
+                                <th className="py-2 px-3 text-right">OI</th>
+                                <th className="py-2 px-3 text-right">CHG IN OI</th>
+                                <th className="py-2 px-3 text-right">VOLUME</th>
+                                <th className="py-2 px-2.5 text-right">IV%</th>
+                                <th className="py-2 px-3.5 text-right text-[#00d2ff] border-r border-[#1c1f26]">LTP (₹)</th>
                                 
-                                <th className="py-2 px-4 text-center font-bold text-white bg-slate-800/90 border-r border-slate-800">
+                                <th className="py-2 px-4 text-center font-black text-white bg-[#12141c] border-r border-[#1c1f26]">
                                   PRICE
                                 </th>
 
-                                <th className="py-2 px-3 text-left text-indigo-300">LTP (₹)</th>
-                                <th className="py-2 px-2 text-right">IV%</th>
-                                <th className="py-2 px-2.5 text-right">VOLUME</th>
-                                <th className="py-2 px-2.5 text-right">CHG IN OI</th>
-                                <th className="py-2 px-2.5 text-right">OI</th>
+                                <th className="py-2 px-3.5 text-left text-[#c084fc]">LTP (₹)</th>
+                                <th className="py-2 px-2.5 text-right">IV%</th>
+                                <th className="py-2 px-3 text-right">VOLUME</th>
+                                <th className="py-2 px-3 text-right">CHG IN OI</th>
+                                <th className="py-2 px-3 text-right">OI</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-900/70">
+                            <tbody className="divide-y divide-[#161820]">
                               {niftyStrategy.chain_rows
                                 .filter((row) => {
                                   if (chainStrikeFilter === "near") {
@@ -662,71 +664,70 @@ export default function RecommendationsPage() {
                                   const isPutSupport = row.strike === niftyStrategy.pre_trade_setup?.intraday?.support_strike;
                                   const isMaxPain = row.strike === niftyStrategy.max_pain_strike;
 
-                                  // ITM highlighting
                                   const callBg = row.is_call_itm
-                                    ? "bg-cyan-950/20"
-                                    : "bg-slate-950/40";
+                                    ? "bg-[#00d2ff]/10"
+                                    : "bg-transparent";
                                   const putBg = row.is_put_itm
-                                    ? "bg-indigo-950/20"
-                                    : "bg-slate-950/40";
+                                    ? "bg-[#c084fc]/10"
+                                    : "bg-transparent";
 
                                   return (
                                     <tr
                                       key={row.strike}
-                                      className={`hover:bg-slate-800/50 transition-colors text-[11px] ${
-                                        isAtm ? "bg-amber-950/25 ring-1 ring-inset ring-amber-500/30" : ""
+                                      className={`hover:bg-[#12141c] transition-colors ${
+                                        isAtm ? "bg-[#fbbf24]/15 ring-1 ring-inset ring-[#fbbf24]/40" : ""
                                       }`}
                                     >
                                       {/* CALLS */}
-                                      <td className={`py-1.5 px-2.5 text-right font-mono ${callBg} ${
-                                        isCallSupport ? "font-bold text-rose-300" : "text-slate-300"
+                                      <td className={`py-2 px-3 text-right font-bold ${callBg} ${
+                                        isCallSupport ? "font-black text-[#ff3b69]" : "text-slate-200"
                                       }`}>
                                         {row.call_oi.toLocaleString("en-IN")}
                                       </td>
-                                      <td className={`py-1.5 px-2.5 text-right font-mono ${callBg} ${
+                                      <td className={`py-2 px-3 text-right font-black ${callBg} ${
                                         row.call_chg_oi > 0
-                                          ? "text-emerald-400"
+                                          ? "text-[#00f5a0]"
                                           : row.call_chg_oi < 0
-                                          ? "text-rose-400 font-bold"
+                                          ? "text-[#ff3b69]"
                                           : "text-slate-400"
                                       }`}>
                                         {row.call_chg_oi > 0 ? `+${row.call_chg_oi.toLocaleString("en-IN")}` : row.call_chg_oi.toLocaleString("en-IN")}
                                       </td>
-                                      <td className={`py-1.5 px-2.5 text-right text-slate-400 ${callBg}`}>
+                                      <td className={`py-2 px-3 text-right text-slate-300 ${callBg}`}>
                                         {(row.call_volume || 0).toLocaleString("en-IN")}
                                       </td>
-                                      <td className={`py-1.5 px-2 text-right text-slate-400 ${callBg}`}>
+                                      <td className={`py-2 px-2.5 text-right text-slate-300 ${callBg}`}>
                                         {row.call_iv ? `${row.call_iv}%` : "-"}
                                       </td>
-                                      <td className={`py-1.5 px-3 text-right font-bold text-cyan-300 border-r border-slate-800 ${callBg}`}>
+                                      <td className={`py-2 px-3.5 text-right font-black text-sm text-[#00d2ff] border-r border-[#1c1f26] ${callBg}`}>
                                         ₹{row.call_ltp.toFixed(2)}
                                       </td>
 
                                       {/* STRIKE */}
-                                      <td className={`py-1.5 px-4 text-center font-bold font-mono border-r border-slate-800 ${
+                                      <td className={`py-2 px-4 text-center font-black text-base border-r border-[#1c1f26] ${
                                         isAtm
-                                          ? "bg-amber-500/20 text-amber-200"
-                                          : "bg-slate-900 text-white"
+                                          ? "bg-[#fbbf24]/20 text-[#fbbf24]"
+                                          : "bg-[#0c0d12] text-white"
                                       }`}>
-                                        <div className="flex items-center justify-center space-x-1">
+                                        <div className="flex items-center justify-center space-x-1.5">
                                           <span>{row.strike}</span>
                                           {isAtm && (
-                                            <span className="text-[9px] px-1 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                                            <span className="text-[10px] px-1 rounded bg-[#fbbf24]/20 text-[#fbbf24] border border-[#fbbf24]/40 font-bold">
                                               ATM
                                             </span>
                                           )}
                                           {isCallSupport && (
-                                            <span className="text-[9px] px-1 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                            <span className="text-[10px] px-1 rounded bg-[#ff3b69]/20 text-[#ff3b69] border border-[#ff3b69]/40 font-bold">
                                               RES
                                             </span>
                                           )}
                                           {isPutSupport && (
-                                            <span className="text-[9px] px-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                            <span className="text-[10px] px-1 rounded bg-[#00f5a0]/20 text-[#00f5a0] border border-[#00f5a0]/40 font-bold">
                                               SUP
                                             </span>
                                           )}
                                           {isMaxPain && (
-                                            <span className="text-[9px] px-1 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                            <span className="text-[10px] px-1 rounded bg-[#c084fc]/20 text-[#c084fc] border border-[#c084fc]/40 font-bold">
                                               PAIN
                                             </span>
                                           )}
@@ -734,26 +735,26 @@ export default function RecommendationsPage() {
                                       </td>
 
                                       {/* PUTS */}
-                                      <td className={`py-1.5 px-3 text-left font-bold text-indigo-300 ${putBg}`}>
+                                      <td className={`py-2 px-3.5 text-left font-black text-sm text-[#c084fc] ${putBg}`}>
                                         ₹{row.put_ltp.toFixed(2)}
                                       </td>
-                                      <td className={`py-1.5 px-2 text-right text-slate-400 ${putBg}`}>
+                                      <td className={`py-2 px-2.5 text-right text-slate-300 ${putBg}`}>
                                         {row.put_iv ? `${row.put_iv}%` : "-"}
                                       </td>
-                                      <td className={`py-1.5 px-2.5 text-right text-slate-400 ${putBg}`}>
+                                      <td className={`py-2 px-3 text-right text-slate-300 ${putBg}`}>
                                         {(row.put_volume || 0).toLocaleString("en-IN")}
                                       </td>
-                                      <td className={`py-1.5 px-2.5 text-right font-mono ${putBg} ${
+                                      <td className={`py-2 px-3 text-right font-black ${putBg} ${
                                         row.put_chg_oi > 0
-                                          ? "text-emerald-400 font-bold"
+                                          ? "text-[#00f5a0]"
                                           : row.put_chg_oi < 0
-                                          ? "text-rose-400"
+                                          ? "text-[#ff3b69]"
                                           : "text-slate-400"
                                       }`}>
                                         {row.put_chg_oi > 0 ? `+${row.put_chg_oi.toLocaleString("en-IN")}` : row.put_chg_oi.toLocaleString("en-IN")}
                                       </td>
-                                      <td className={`py-1.5 px-2.5 text-right font-mono ${putBg} ${
-                                        isPutSupport ? "font-bold text-emerald-300" : "text-slate-300"
+                                      <td className={`py-2 px-3 text-right font-bold ${putBg} ${
+                                        isPutSupport ? "font-black text-[#00f5a0]" : "text-slate-200"
                                       }`}>
                                         {row.put_oi.toLocaleString("en-IN")}
                                       </td>
@@ -763,48 +764,45 @@ export default function RecommendationsPage() {
                             </tbody>
                           </table>
 
-                          {/* Legend Bar */}
-                          <div className="p-2.5 bg-slate-900 border-t border-slate-800 flex flex-wrap items-center justify-between text-[10px] text-slate-400 gap-2 font-mono">
-                            <div className="flex items-center space-x-3">
-                              <span className="flex items-center space-x-1">
-                                <span className="w-2.5 h-2.5 rounded-sm bg-cyan-950/70 border border-cyan-700"></span>
-                                <span>In-The-Money (ITM Calls)</span>
+                          <div className="p-3 bg-[#0c0d12] border-t border-[#1c1f26] flex flex-wrap items-center justify-between text-xs text-slate-300 font-semibold gap-2">
+                            <div className="flex items-center space-x-4">
+                              <span className="flex items-center space-x-1.5">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-[#00d2ff]/20 border border-[#00d2ff]/50"></span>
+                                <span>IN-THE-MONEY CALLS (ITM)</span>
                               </span>
-                              <span className="flex items-center space-x-1">
-                                <span className="w-2.5 h-2.5 rounded-sm bg-indigo-950/70 border border-indigo-700"></span>
-                                <span>In-The-Money (ITM Puts)</span>
+                              <span className="flex items-center space-x-1.5">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-[#c084fc]/20 border border-[#c084fc]/50"></span>
+                                <span>IN-THE-MONEY PUTS (ITM)</span>
                               </span>
-                              <span className="flex items-center space-x-1">
-                                <span className="w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-400"></span>
-                                <span>At-The-Money (ATM)</span>
+                              <span className="flex items-center space-x-1.5">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-[#fbbf24]/30 border border-[#fbbf24]"></span>
+                                <span>AT-THE-MONEY (ATM SPOT)</span>
                               </span>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <span>* Spot Price: ₹{niftyStrategy.spot_price.toLocaleString("en-IN")}</span>
-                            </div>
+                            <span>SOURCE: LIVE NSE INDIA OPTION CHAIN CONTRACTS</span>
                           </div>
                         </div>
                       )}
                     </div>
                   )}
                 </div>
-              </section>
+              </div>
             )}
 
-            {/* SECTION 2: OTHER OPTIONS RECOMMENDATIONS */}
+            {/* SECTION 2: OTHER OPTIONS STRATEGIES */}
             {options.length > 0 && (
-              <section className="space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="p-4 rounded border border-[#1c1f26] bg-[#0c0d12] space-y-3">
+                <div className="flex items-center justify-between border-b border-[#1c1f26] pb-2">
                   <div className="flex items-center space-x-2">
-                    <Target className="w-4 h-4 text-indigo-400" />
-                    <h2 className="text-base font-bold text-white tracking-wide">
-                      Additional Options Strategies
-                    </h2>
+                    <Target className="w-3.5 h-3.5 text-[#00d2ff]" />
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">
+                      ADDITIONAL DERIVATIVE TACTICAL STRATEGIES
+                    </span>
                   </div>
-                  <span className="text-xs text-slate-400">Index & Stock Options</span>
+                  <span className="text-[10px] text-slate-500">INDEX &amp; HIGH-LIQUIDITY EQUITIES</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {options.map((opt, i) => {
                     const actionLabel = (opt.recommended_action || opt.action || opt.bias || "BUY").toUpperCase();
                     const isBuy = actionLabel.includes("BUY") || actionLabel.includes("CALL") || actionLabel.includes("SPREAD");
@@ -817,57 +815,57 @@ export default function RecommendationsPage() {
                     return (
                       <div
                         key={i}
-                        className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition space-y-3"
+                        className="p-3 rounded border border-[#252833] bg-[#070709] space-y-2 hover:border-[#00d2ff]/40 transition"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                              isBuy ? "bg-emerald-950 text-emerald-400 border border-emerald-800" : "bg-rose-950 text-rose-400 border border-rose-800"
+                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                              isBuy ? "bg-[#00f5a0]/15 text-[#00f5a0] border border-[#00f5a0]/30" : "bg-[#ff3b69]/15 text-[#ff3b69] border border-[#ff3b69]/30"
                             }`}>
                               {actionLabel}
                             </span>
-                            <span className="font-bold text-white font-mono text-sm">{title}</span>
+                            <span className="font-bold text-white text-xs">{title}</span>
                           </div>
-                          <span className="text-[11px] font-mono text-slate-400">{opt.expiry || "Weekly"}</span>
+                          <span className="text-[10px] text-slate-400">{opt.expiry || "WEEKLY"}</span>
                         </div>
                         {rationaleText && (
-                          <p className="text-xs text-slate-300 leading-relaxed">{rationaleText}</p>
+                          <p className="text-[11px] text-slate-300 leading-relaxed">{rationaleText}</p>
                         )}
-                        <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-800/80 text-[11px] font-mono">
+                        <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[#1c1f26] text-[10px]">
                           <div>
-                            <span className="text-slate-500 block">Est. Premium</span>
-                            <span className="text-slate-200">{entryPrice}</span>
+                            <span className="text-slate-500 block">EST. ENTRY</span>
+                            <span className="text-slate-200 font-bold">{entryPrice}</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 block">Target</span>
-                            <span className="text-emerald-400">{targetPrice}</span>
+                            <span className="text-slate-500 block">TARGET</span>
+                            <span className="text-[#00f5a0] font-bold">{targetPrice}</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 block">Stop Loss</span>
-                            <span className="text-rose-400">{stopPrice}</span>
+                            <span className="text-slate-500 block">STOP LOSS</span>
+                            <span className="text-[#ff3b69] font-bold">{stopPrice}</span>
                           </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </section>
+              </div>
             )}
 
             {/* SECTION 3: TOP STOCKS TO TAKE */}
             {stocks.length > 0 && (
-              <section className="space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="p-4 rounded border border-[#1c1f26] bg-[#0c0d12] space-y-3">
+                <div className="flex items-center justify-between border-b border-[#1c1f26] pb-2">
                   <div className="flex items-center space-x-2">
-                    <TrendingUp className="w-4 h-4 text-emerald-400" />
-                    <h2 className="text-base font-bold text-white tracking-wide">
-                      Top Equity Cash / Swing Ideas
-                    </h2>
+                    <TrendingUp className="w-3.5 h-3.5 text-[#00f5a0]" />
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">
+                      EQUITY CASH SCREENER &bull; LOW RISK CLEAN FLOW BREAKOUTS
+                    </span>
                   </div>
-                  <span className="text-xs text-slate-400">Low-Risk Momentum & Breakouts</span>
+                  <span className="text-[10px] text-slate-500">MOMENTUM CANDIDATES</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {stocks.map((stk, i) => {
                     const symbol = stk.ticker || stk.symbol || "";
                     const price = stk.price != null ? stk.price : stk.current_price;
@@ -879,44 +877,44 @@ export default function RecommendationsPage() {
                     return (
                       <div
                         key={i}
-                        className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition flex flex-col justify-between space-y-3"
+                        className="p-3 rounded border border-[#252833] bg-[#070709] hover:border-[#00f5a0]/40 transition flex flex-col justify-between space-y-2"
                       >
                         <div>
                           <div className="flex items-center justify-between">
-                            <span className="font-bold text-white font-mono">{symbol}</span>
-                            <span className="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">
+                            <span className="font-black text-white text-xs">{symbol}</span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#00f5a0]/15 text-[#00f5a0] border border-[#00f5a0]/30">
                               {change > 0 ? `+${change.toFixed(1)}%` : `${change.toFixed(1)}%`}
                             </span>
                           </div>
-                          <div className="text-[11px] text-cyan-400 mt-0.5 font-semibold">{category}</div>
-                          <p className="text-xs text-slate-300 mt-2 leading-relaxed">{reason}</p>
+                          <div className="text-[10px] text-[#00d2ff] mt-0.5 font-bold uppercase">{category}</div>
+                          <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">{reason}</p>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/80 text-[11px] font-mono">
+                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#1c1f26] text-[10px]">
                           <div>
-                            <span className="text-slate-500 block">Entry</span>
-                            <span className="text-slate-200">{price ? `₹${price}` : "Market"}</span>
+                            <span className="text-slate-500 block">ENTRY</span>
+                            <span className="text-slate-200 font-bold">{price ? `₹${price}` : "Market"}</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 block">Target</span>
-                            <span className="text-emerald-400">{stk.target_price ? `₹${stk.target_price}` : "N/A"}</span>
+                            <span className="text-slate-500 block">TARGET</span>
+                            <span className="text-[#00f5a0] font-bold">{stk.target_price ? `₹${stk.target_price}` : "N/A"}</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 block">Stop</span>
-                            <span className="text-rose-400">{stop ? `₹${stop}` : "N/A"}</span>
+                            <span className="text-slate-500 block">STOP</span>
+                            <span className="text-[#ff3b69] font-bold">{stop ? `₹${stop}` : "N/A"}</span>
                           </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </section>
+              </div>
             )}
 
-            {/* Disclaimer */}
+            {/* Regulatory Disclaimer */}
             {disclaimer && (
-              <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 text-[11px] text-slate-500 leading-relaxed">
-                <span className="font-semibold text-slate-400">Regulatory Disclaimer:</span> {disclaimer}
+              <div className="p-3 rounded border border-[#1c1f26] bg-[#0c0d12] text-[10px] text-slate-500 leading-relaxed">
+                <span className="font-bold text-slate-400">REGULATORY DISCLAIMER:</span> {disclaimer}
               </div>
             )}
           </>
