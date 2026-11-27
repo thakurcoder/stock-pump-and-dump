@@ -1,0 +1,135 @@
+\documentclass[12pt,a4paper,oneside]{report}
+
+% ── Geometry & Layout ──
+\usepackage[left=1.25in,right=1in,top=1in,bottom=1in]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% ── Typography & Fonts ──
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx} % Times New Roman equivalent
+\usepackage{microtype}
+
+% ── Math & Symbols ──
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+
+% ── Tables & Figures ──
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+
+% ── Code Listings & Algorithmic Blocks ──
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Custom listing colors matching terminal palette
+\definecolor{codebg}{rgb}{0.96,0.97,0.98}
+\definecolor{codeborder}{rgb}{0.85,0.88,0.92}
+\definecolor{codegreen}{rgb}{0.0,0.5,0.2}
+\definecolor{codeblue}{rgb}{0.1,0.3,0.7}
+\definecolor{codegray}{rgb}{0.45,0.45,0.45}
+\definecolor{codepurple}{rgb}{0.5,0.0,0.5}
+
+\lstdefinestyle{terminalcode}{
+    backgroundcolor=\color{codebg},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{codeblue}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=7pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single,
+    rulecolor=\color{codeborder}
+}
+\lstset{style=terminalcode}
+
+% ── Headers and Footers ──
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[R]{\small\nouppercase{\textit{SentinelMarket: Real-Time Market Surveillance \& F\&O Desk}}}
+\fancyfoot[L]{\small\nouppercase{\textit{BVIMIT}}}
+\fancyfoot[R]{\small Page \thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0.5pt}
+
+\fancypagestyle{plain}{
+    \fancyhf{}
+    \fancyfoot[L]{\small\nouppercase{\textit{BVIMIT}}}
+    \fancyfoot[R]{\small Page \thepage}
+    \renewcommand{\headrulewidth}{0pt}
+    \renewcommand{\footrulewidth}{0.5pt}
+}
+
+% ── Hyperlinks ──
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=black,
+    urlcolor=blue,
+    pdftitle={SentinelMarket: A Real-Time Equity Anomaly Surveillance and Institutional Options Risk Playbook for Indian Financial Markets},
+    pdfauthor={Aman Kumar Singh}
+}
+
+% ── Chapter Titles Styling ──
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{20pt}{25pt}
+
+\begin{document}
+
+% ── Front Matter ──
+\pagenumbering{roman}
+
+\input{frontmatter/title.tex}
+\input{frontmatter/approval.tex}
+\input{frontmatter/mentor.tex}
+\input{frontmatter/declaration.tex}
+\input{frontmatter/acknowledgement.tex}
+\input{frontmatter/abstract.tex}
+
+% ── Table of Contents, Figures, Tables, Nomenclature ──
+\tableofcontents
+\newpage
+\listoffigures
+\newpage
+\listoftables
+\newpage
+\input{frontmatter/nomenclature.tex}
+\newpage
+
+% ── Main Matter ──
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\input{chapters/ch1_introduction.tex}
+\input{chapters/ch2_literature_review.tex}
+\input{chapters/ch3_methodology.tex}
+\input{chapters/ch4_implementation.tex}
+\input{chapters/ch5_results.tex}
+\input{chapters/ch6_conclusion.tex}
+
+% ── Annexures & References ──
+\appendix
+\input{chapters/annexure.tex}
+\input{chapters/references.tex}
+
+\end{document}

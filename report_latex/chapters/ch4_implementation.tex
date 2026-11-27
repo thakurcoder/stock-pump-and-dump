@@ -1,0 +1,124 @@
+\chapter{Implementation}
+
+\section{Data Pre-Processing and Ingestion Pipeline}
+The data layer is responsible for ingesting, validating, and structuring market telemetry. Because SentinelMarket operates without external database overhead, all computations execute in-memory with local file-backed persistence.
+
+\subsection{Historical OHLCV Cache Architecture}
+Historical stock records are acquired via the \texttt{yfinance} API and stored as daily partition caches in \texttt{pumpwatch/.cache/}. A sample daily record includes:
+\begin{itemize}
+    \item \textbf{Timestamp / Date:} ISO 8601 market date format.
+    \item \textbf{Price Vectors:} Open, High, Low, Close, and Adjusted Close.
+    \item \textbf{Volume Series:} Exact traded equity share volume.
+\end{itemize}
+
+\noindent When a ticker query is triggered, the system checks whether the cache was modified within the last 4 hours during market trading hours. If fresh, the cache is read directly in $<5\text{ ms}$, bypassing network latency.
+
+\subsection{Live Exchange Telemetry via Browser Impersonation}
+Official exchange endpoints (such as \texttt{nseindia.com}) employ strict WAFs (Web Application Firewalls), TLS fingerprinting, and session cookie validation. Standard Python \texttt{requests} or \texttt{urllib} calls encounter immediate HTTP 403 Forbidden blocks.
+
+To solve this, the derivatives engine leverages \texttt{curl\_cffi} with simulated Chrome browser TLS fingerprints:
+\begin{lstlisting}[language=Python, caption={Browser impersonation session for live NSE derivatives}]
+from curl_cffi import requests
+
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/"
+}
+
+session = requests.Session(impersonate="chrome120")
+session.get("https://www.nseindia.com", headers=headers, timeout=5)
+response = session.get(
+    "https://www.nseindia.com/api/liveEquity-derivatives?index=nse50_opt",
+    headers=headers, timeout=5
+)
+\end{lstlisting}
+
+\section{Experimental Setup and Testbed Environment}
+Table \ref{tab:dev_environment} details the implementation and runtime environment.
+
+\begin{table}[H]
+\centering
+\caption{Development and Runtime Specifications}
+\label{tab:dev_environment}
+\begin{tabularx}{\textwidth}{@{}llX@{}}
+\toprule
+\textbf{Component} & \textbf{Environment / Tool} & \textbf{Responsibility} \\
+\midrule
+Backend Runtime & Python 3.11 / Python 3.14 & Asynchronous API, signal calculation, caching. \\
+Web Framework & FastAPI 0.115+ \& Uvicorn & REST endpoints, JSON validation, CORS. \\
+Frontend Runtime & Node.js 20+ / React 19 & Next.js 15 App Router Single-Page Application. \\
+Styling Framework & Tailwind CSS v4 & Bloomberg carbon dark theme, responsive flex/grid. \\
+Testing Suite & Pytest 8.0+ & Automated mathematical and API contract tests. \\
+Operating System & Microsoft Windows 11 / Linux & Host execution environment. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Default Development Service Endpoints}
+Table \ref{tab:endpoints} lists the active network bindings during execution.
+
+\begin{table}[H]
+\centering
+\caption{Default Local Development Endpoints}
+\label{tab:endpoints}
+\begin{tabular}{lll}
+\toprule
+\textbf{Service} & \textbf{Network Port} & \textbf{Role} \\
+\midrule
+Next.js Frontend & \texttt{http://localhost:3000} & Browser-facing Bloomberg Dark Terminal \\
+FastAPI Backend & \texttt{http://localhost:8000} & Quantitative surveillance API gateway \\
+OpenAPI Swagger Docs & \texttt{http://localhost:8000/docs} & Interactive API documentation \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Implementation of the Core Modules}
+
+\subsection{PumpWatch Signal Engine (\texttt{signals.py})}
+The mathematical signal engine is implemented as a set of pure, vectorized functions operating on \texttt{pandas.Series} arrays:
+
+\begin{lstlisting}[language=Python, caption={Core Volume Z-Score and RSI implementation in PumpWatch}]
+def compute_volume_zscore(volume_series: pd.Series, window: int = 20) -> float:
+    if len(volume_series) < window + 1:
+        return 0.0
+    hist = volume_series.iloc[-(window + 1):-1]
+    current = volume_series.iloc[-1]
+    mean_vol = hist.mean()
+    std_vol = hist.std(ddof=1)
+    if std_vol == 0 or np.isnan(std_vol):
+        return 0.0
+    return float((current - mean_vol) / std_vol)
+
+def compute_rsi(close_series: pd.Series, period: int = 14) -> float:
+    if len(close_series) < period + 1:
+        return 50.0
+    delta = close_series.diff().dropna()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(window=period).mean().iloc[-1]
+    avg_loss = loss.rolling(window=period).mean().iloc[-1]
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return float(100.0 - (100.0 / (1.0 + rs)))
+\end{lstlisting}
+
+\subsection{FastAPI REST Service Architecture (\texttt{main.py})}
+The backend service exposes three primary endpoints:
+\begin{enumerate}
+    \item \texttt{GET /api/screen?universe=\{nifty50|watchlist\}\&top=50}: Evaluates the specified universe and returns a ranked list of scored equities.
+    \item \texttt{GET /api/stock/\{ticker\}}: Generates an on-demand, deep diagnostic report for any NSE-listed stock.
+    \item \texttt{GET /api/recommendations}: Executes the institutional options playbook, returning Intraday OI, Positional OI, Trapped Writer Overrides, and the 31-strike live option chain.
+\end{enumerate}
+
+\subsection{Bloomberg Dark Terminal UI (\texttt{page.tsx} \& \texttt{recommendations/page.tsx})}
+The user interface is styled using a pure carbon black theme (\texttt{\#070709}, \texttt{\#0c0d12}), high-contrast electric accents (\texttt{\#00f5a0} for positive/safe, \texttt{\#00d2ff} for calls/search, \texttt{\#ff3b69} for alerts/resistance), and strict monospace typography (\texttt{font-mono}).
+
+\noindent Keyboard hotkeys are bound via global event listeners:
+\begin{itemize}
+    \item \kbd{1} --- Instantly switches universe to \textbf{NIFTY 50}.
+    \item \kbd{2} --- Instantly switches universe to \textbf{Custom Watchlist}.
+    \item \kbd{R} --- Triggers immediate data re-fetch across the active universe.
+    \item \kbd{/} --- Focuses the query ticker search command line.
+\end{itemize}

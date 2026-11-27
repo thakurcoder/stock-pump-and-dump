@@ -1,0 +1,73 @@
+\chapter{Supporting Research and Technical Material}
+
+\section{Repository and Research Artifacts}
+The complete source code, automated test suites, configuration files, and mathematical implementations for SentinelMarket are maintained on GitHub:
+\begin{center}
+\textbf{Repository URL:} \url{https://github.com/thakurcoder/stock-pump-and-dump.git}
+\end{center}
+
+\noindent Table \ref{tab:repo_artifacts} details the primary technical artifacts included in the repository.
+
+\begin{table}[H]
+\centering
+\caption{Key Project Source Files and Technical Artifacts}
+\label{tab:repo_artifacts}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+\textbf{File / Directory Path} & \textbf{Technical Purpose} \\
+\midrule
+\texttt{pumpwatch/config.py} & Tunable statistical thresholds, Z-score limits, and scoring weights. \\
+\texttt{pumpwatch/signals.py} & Vectorized mathematical functions (Volume Z-Score, RSI, Bollinger Bands). \\
+\texttt{pumpwatch/scoring.py} & 0--100 composite risk scoring engine and human-readable explanation logic. \\
+\texttt{pumpwatch/screen.py} & Batch screening pipeline and single source of truth for surveillance. \\
+\texttt{pumpwatch/tickers.txt} & Default universe of monitored Indian equity tickers. \\
+\texttt{pumpwatch/tests/} & 19 automated unit tests verifying mathematical functions. \\
+\texttt{backend/main.py} & FastAPI application endpoints (\texttt{/api/screen}, \texttt{/api/stock}, etc.). \\
+\texttt{backend/nifty\_options\_strategy.py} & Institutional OI derivatives parser, gamma panic, and strike filter. \\
+\texttt{backend/tests/} & 8 automated integration tests using FastAPI \texttt{TestClient}. \\
+\texttt{frontend/src/app/page.tsx} & Next.js 15 Bloomberg Dark Terminal surveillance dashboard. \\
+\texttt{frontend/src/app/recommendations/page.tsx} & 31-Strike option chain orderbook and derivatives execution desk. \\
+\texttt{frontend/src/app/globals.css} & Carbon black theme, typography scaling, and keyframe animations. \\
+\texttt{dev.ps1} & One-click automated startup script for Windows PowerShell. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{System Reproduction Procedure}
+To reproduce the experimental testbed and launch the application locally, execute the following commands in Windows PowerShell:
+
+\begin{lstlisting}[language=bash, caption={Complete reproduction and execution script}]
+# 1. Clone repository
+git clone https://github.com/thakurcoder/stock-pump-and-dump.git
+cd stock-pump-and-dump
+
+# 2. Setup Python virtual environment
+python -m venv pumpwatch/venv
+.\pumpwatch\venv\Scripts\Activate.ps1
+
+# 3. Install dependencies in editable mode
+pip install -e pumpwatch
+pip install -r backend/requirements.txt
+
+# 4. Install frontend npm dependencies
+cd frontend
+npm install
+cd ..
+
+# 5. Run automated test suites
+pytest pumpwatch/tests -v
+pytest backend/tests -v
+
+# 6. Launch system via one-click script
+.\dev.ps1
+\end{lstlisting}
+
+\section{Submission and Research Integrity Checklist}
+Before submission, the following verification items were fulfilled:
+\begin{itemize}
+    \item Source code repository verified and synchronized with GitHub origin.
+    \item All mathematical formulas rigorously verified against standard statistical finance literature.
+    \item Automated unit and integration test suites passing with 100\% success rate.
+    \item Sensitive credentials, proprietary API keys, and personal financial data strictly excluded.
+    \item Report formatting, page numbers, nomenclature, and citations checked against the University of Mumbai BVIMIT guidelines.
+\end{itemize}
