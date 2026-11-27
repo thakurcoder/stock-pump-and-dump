@@ -25,3 +25,5 @@ frontend/out/
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
+
+report_latex/
