@@ -200,24 +200,24 @@ export default function RecommendationsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30">
+    <div className="min-h-screen bg-[#050b14] text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30">
       {/* Top Navbar */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+      <header className="border-b border-[#142338] bg-[#081220]/95 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <Zap className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-2xl bg-[#0c1a2e] border border-[#1e3a5f] flex items-center justify-center shadow-md">
+            <Compass className="w-6 h-6 text-emerald-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-indigo-300 to-white">
-              Trading Recommendations
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+              NIFTY 50 Options &amp; Ideas
             </h1>
-            <p className="text-xs text-slate-400">Institutional NIFTY 50 OI & Market Playbook</p>
+            <p className="text-xs text-slate-400 font-semibold">Institutional Open Interest (OI) Strategy Guide</p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           {/* Auto-refresh control group */}
-          <div className="flex items-center space-x-2 bg-slate-800/80 border border-slate-700/80 px-2.5 py-1.5 rounded-lg text-xs">
+          <div className="flex items-center space-x-2 bg-[#0c1a2e] border border-[#1e3a5f] px-3 py-1.5 rounded-xl text-xs">
             {/* Toggle Switch */}
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -226,8 +226,8 @@ export default function RecommendationsPage() {
                 onChange={(e) => setAutoRefresh(e.target.checked)}
                 className="sr-only peer"
               />
-              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-cyan-500"></div>
-              <span className="ml-2 font-medium text-slate-300 select-none">
+              <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+              <span className="ml-2 font-bold text-slate-200 select-none">
                 Auto-Refresh
               </span>
             </label>
@@ -238,20 +238,20 @@ export default function RecommendationsPage() {
               disabled={!autoRefresh}
               onChange={(e) => handleIntervalChange(Number(e.target.value))}
               aria-label="Refresh Interval"
-              className={`bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-[11px] font-mono text-cyan-300 focus:outline-none focus:border-cyan-500 transition ${
+              className={`bg-[#050c17] border border-[#1e3a5f] rounded-lg px-2 py-0.5 text-xs font-mono text-emerald-300 focus:outline-none focus:border-emerald-500 transition ${
                 !autoRefresh ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
               }`}
             >
-              <option value={15}>15s (Ultra Fast)</option>
-              <option value={30}>30s (Fast)</option>
-              <option value={60}>1m (Standard)</option>
+              <option value={15}>15s (Fast)</option>
+              <option value={30}>30s (Active)</option>
+              <option value={60}>1m (Normal)</option>
               <option value={180}>3m (NSE Snapshot)</option>
-              <option value={300}>5m (Position)</option>
+              <option value={300}>5m (Safe)</option>
             </select>
 
             {/* Countdown Badge */}
             {autoRefresh && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 shrink-0">
+              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-[#092218] text-emerald-400 border border-emerald-500/40 shrink-0">
                 {secondsLeft}s
               </span>
             )}
@@ -260,40 +260,42 @@ export default function RecommendationsPage() {
           {/* Manual Refresh Button */}
           <button
             onClick={() => fetchRecommendations(false)}
-            className="flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition"
+            className="flex items-center space-x-1.5 text-xs font-bold px-3.5 py-2 rounded-xl border border-[#1e3a5f] bg-[#0c1a2e] hover:bg-[#122846] text-slate-200 transition"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-cyan-400" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-emerald-400" : ""}`} />
             <span>Refresh</span>
           </button>
 
           <Link
             href="/"
-            className="text-xs font-semibold px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition shadow-sm"
+            className="text-xs font-bold px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-md shadow-emerald-600/20"
           >
-            Sentinel Dashboard &rarr;
+            &larr; Back to Stock Guardian
           </Link>
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-8">
-        {/* Banner */}
-        <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-950/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <Compass className="w-6 h-6 text-indigo-400 shrink-0" />
+      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-7">
+        {/* Banner with Deep Blue & Controlled Green */}
+        <div className="p-5 rounded-3xl border border-[#162d4c] bg-gradient-to-r from-[#091526] to-[#07111f] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+          <div className="flex items-center space-x-3.5">
+            <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <Compass className="w-6 h-6 shrink-0" />
+            </div>
             <div>
-              <h2 className="text-sm font-semibold text-indigo-200">
-                Institutional NIFTY 50 OI Strategy Active
+              <h2 className="text-base sm:text-lg font-black text-white">
+                Live NIFTY 50 Option Strategy Matrix Active
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Evaluates Intraday / Positional Open Interest (OI), Trapped Writer Panic Unwinding, Strike Range Width, and INDIAVIX Regime.
+              <p className="text-xs text-slate-300 mt-0.5">
+                Evaluates Live Spot, Trapped Writer Unwinding, Strike Width Range, and Volatility Regime.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-slate-800/80 text-cyan-400 border border-slate-700">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-[#0c1a2e] text-emerald-400 border border-emerald-500/30">
               NIFTY Spot: {niftyStrategy ? niftyStrategy.spot_price?.toLocaleString("en-IN") : "..."}
             </span>
-            <span className="text-[11px] font-mono px-2.5 py-1 rounded bg-slate-800/80 text-amber-400 border border-slate-700">
+            <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-[#0c1a2e] text-amber-300 border border-amber-500/30">
               INDIA VIX: {niftyStrategy ? `${niftyStrategy.india_vix} (${niftyStrategy.vix_direction})` : "..."}
             </span>
           </div>
